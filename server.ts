@@ -173,7 +173,7 @@ Não retorne markdown fora do objeto JSON, apenas o JSON puro, para parse direto
   // --- LAYER 2: TRY WITH STANDARD GEMINI (WITHOUT SEARCH GROUNDING TOOL) ---
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.0-flash",
       contents: `${prompt}\n\nNota: Se você não sabe a data exata com precisão, tente inferir a data para o ano de 2026.`,
       config: {
         responseMimeType: "application/json"
@@ -232,15 +232,22 @@ app.post("/api/search-image", async (req, res) => {
       }
     });
     
-    // Mapear os resultados para pegar apenas as URLs e limitar a 6 opções de alta qualidade
+    // Mapear os resultados para pegar apenas as URLs e filtrar captchas/imagens de sistema do Google
     const urls = images
-      .slice(0, 8)
       .map((img: any) => img.url)
-      .filter((url: string) => url.startsWith('http'))
+      .filter((url: string) => {
+        if (!url || typeof url !== 'string' || !url.startsWith('http')) return false;
+        const lowerUrl = url.toLowerCase();
+        // Ignora imagens com domínio do Google/gstatic/captcha
+        if (lowerUrl.includes('google.com') || lowerUrl.includes('gstatic.com') || lowerUrl.includes('googlelogo')) {
+          return false;
+        }
+        return true;
+      })
       .slice(0, 6); // Garantir até 6 opções na interface
 
-    if (urls.length === 0) {
-      throw new Error('Nenhuma imagem encontrada.');
+    if (urls.length < 2) {
+      throw new Error('Nenhuma imagem externa encontrada (Possível bloqueio/captcha do Google).');
     }
 
     return res.json({ results: urls });
