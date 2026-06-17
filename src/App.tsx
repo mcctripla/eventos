@@ -1769,10 +1769,10 @@ export default function App() {
       setNewLocation(isHoli ? 'Brasil' : 'Remoto');
     }
 
-    if (data.linksAndRepos) setNewLinksAndRepos(data.linksAndRepos);
-    if (data.targetAudience) setNewTargetAudience(data.targetAudience);
-    if (data.benefitsDeliverables) setNewBenefitsDeliverables(data.benefitsDeliverables);
-    if (data.internalObservations) setNewInternalObservations(data.internalObservations);
+    if (data.linksAndRepos && sel['linksAndRepos']) setNewLinksAndRepos(data.linksAndRepos);
+    if (data.targetAudience && sel['targetAudience']) setNewTargetAudience(data.targetAudience);
+    if (data.benefitsDeliverables && sel['benefitsDeliverables']) setNewBenefitsDeliverables(data.benefitsDeliverables);
+    if (data.internalObservations && sel['internalObservations']) setNewInternalObservations(data.internalObservations);
 
     setNewHost('Google Search Assistant');
     setNewSourceUrl(data.source_url || '');
