@@ -5,7 +5,8 @@ import {
   Package, Truck, UserCheck, Plane, Plus, X, Trash2, Edit3,
   Search, DollarSign, Tag, Phone, Mail, ExternalLink, TrendingUp,
   Hotel, Navigation, MapPin, Calendar, Clock, CheckCircle2, AlertCircle,
-  Users, Building, Globe, Eye, BarChart3
+  Users, Building, Globe, Eye, BarChart3, ArrowRightLeft,
+  BookOpen, HelpCircle, Info, AlertTriangle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────────────────────────
@@ -103,24 +104,38 @@ export function EmptyState({
 /* ─────────────────────────────────────────────────────────────────
    INVENTÁRIO TAB
 ───────────────────────────────────────────────────────────────── */
-interface InventarioTabProps { darkMode: boolean; inventoryItems: any[]; showToast: (m: string) => void; }
+interface InventarioTabProps { 
+  darkMode: boolean; 
+  inventoryItems: any[]; 
+  events?: any[];
+  baixasVendedores?: any[];
+  showToast: (m: string) => void; 
+}
 
-export function InventarioTab({ darkMode, inventoryItems, showToast }: InventarioTabProps) {
-  const [search, setSearch] = useState('');
-  const [filterCol, setFilterCol] = useState('todos');
-  const [isOpen, setIsOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
+export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVendedores = [], showToast }: InventarioTabProps) {
+  const [activeSubTab, setActiveSubTab] = React.useState<'estoque' | 'vendedores' | 'eventos'>('estoque');
+  const [search, setSearch] = React.useState('');
+  const [filterCol, setFilterCol] = React.useState('todos');
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<any>(null);
 
-  const [errors, setErrors] = useState<Record<string, boolean>>({});
-  const [shake, setShake] = useState(false);
+  // States for Vendedor Withdrawal Form
+  const [selectedItemId, setSelectedItemId] = React.useState('');
+  const [vendedorName, setVendedorName] = React.useState('');
+  const [clienteName, setClienteName] = React.useState('');
+  const [baixaQty, setBaixaQty] = React.useState<number | ''>('');
+  const [baixaDate, setBaixaDate] = React.useState(() => new Date().toISOString().split('T')[0]);
+  const [baixaReason, setBaixaReason] = React.useState('');
+  const [isSubmittingBaixa, setIsSubmittingBaixa] = React.useState(false);
 
-  const [form, setForm] = useState({ nome: '', descricao: '', quantidade: '', unidade: '', categoria: '', fornecedor: '', custo_unitario: '', _collection: 'inventario' });
+  // States for search and filter in other tabs
+  const [vendedorSearch, setVendedorSearch] = React.useState('');
+  const [eventSearch, setEventSearch] = React.useState('');
 
-  const filtered = inventoryItems.filter(i => {
-    const matchSearch = (i.nome || '').toLowerCase().includes(search.toLowerCase());
-    const matchCol = filterCol === 'todos' || i._collection === filterCol;
-    return matchSearch && matchCol;
-  });
+  const [errors, setErrors] = React.useState<Record<string, boolean>>({});
+  const [shake, setShake] = React.useState(false);
+
+  const [form, setForm] = React.useState({ nome: '', descricao: '', quantidade: '', unidade: '', categoria: '', fornecedor: '', custo_unitario: '', _collection: 'inventario' });
 
   const collectionColors: Record<string, string> = {
     inventario: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
@@ -132,6 +147,49 @@ export function InventarioTab({ darkMode, inventoryItems, showToast }: Inventari
   const collectionLabels: Record<string, string> = {
     inventario: 'Inventário', brindes: 'Brindes', uniformes: 'Uniformes', estoque: 'Estoque'
   };
+
+  const filteredItems = inventoryItems.filter(i => {
+    const matchSearch = (i.nome || '').toLowerCase().includes(search.toLowerCase());
+    const matchCol = filterCol === 'todos' || i._collection === filterCol;
+    return matchSearch && matchCol;
+  });
+
+  const sortedItemsForSelect = [...inventoryItems]
+    .filter(i => (i.quantidade || 0) > 0)
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+  // withdrawals (baixas) filtered and sorted
+  const filteredBaixas = baixasVendedores
+    .filter(b => {
+      const term = vendedorSearch.toLowerCase();
+      return (b.vendedor || '').toLowerCase().includes(term) ||
+             (b.cliente || '').toLowerCase().includes(term) ||
+             (b.itemName || '').toLowerCase().includes(term);
+    })
+    .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+
+  // map all allocated gifts in events
+  const eventGifts = events
+    .flatMap(ev => {
+      const allocated = ev.brindes_alocados || [];
+      return allocated.map((g: any) => ({
+        id: g.id || `${ev.id}-${g.docId || g.item}`,
+        itemId: g.docId,
+        itemName: g.item,
+        quantidade: g.qtd || 0,
+        eventId: ev.id,
+        eventName: ev.evento,
+        eventDate: ev.data_ini,
+        eventStatus: ev.status || 'Planejado',
+        category: g._collection || 'inventario'
+      }));
+    })
+    .filter(g => {
+      const term = eventSearch.toLowerCase();
+      return (g.itemName || '').toLowerCase().includes(term) ||
+             (g.eventName || '').toLowerCase().includes(term);
+    })
+    .sort((a, b) => (b.eventDate || '').localeCompare(a.eventDate || ''));
 
   const closeModal = () => {
     setIsOpen(false);
@@ -173,8 +231,112 @@ export function InventarioTab({ darkMode, inventoryItems, showToast }: Inventari
     showToast('Item removido do inventário.');
   };
 
+  const handleCreateBaixa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItemId) {
+      return showToast('Selecione um item do estoque.');
+    }
+    if (!vendedorName.trim()) {
+      return showToast('Digite o nome do vendedor.');
+    }
+    if (!clienteName.trim()) {
+      return showToast('Digite o nome do cliente/empresa.');
+    }
+    const qty = Number(baixaQty);
+    if (!qty || qty <= 0) {
+      return showToast('Digite uma quantidade válida maior que zero.');
+    }
+
+    const item = inventoryItems.find(i => i.id === selectedItemId);
+    if (!item) {
+      return showToast('Item não encontrado.');
+    }
+
+    const currentQty = Number(item.quantidade) || 0;
+    if (currentQty < qty) {
+      return showToast(`Saldo insuficiente! Apenas ${currentQty} unidades disponíveis.`);
+    }
+
+    setIsSubmittingBaixa(true);
+    try {
+      // 1. Criar registro na coleção 'baixas_vendedores'
+      const payload = {
+        itemId: item.id,
+        itemName: item.nome,
+        itemCollection: item._collection || 'inventario',
+        vendedor: vendedorName,
+        cliente: clienteName,
+        quantidade: qty,
+        data: baixaDate,
+        motivo: baixaReason,
+        custo_unitario: Number(item.custo_unitario) || 0,
+        custo_total: (Number(item.custo_unitario) || 0) * qty,
+        timestamp: Timestamp.now()
+      };
+
+      await addDoc(collection(db, 'baixas_vendedores'), payload);
+
+      // 2. Dar baixa no estoque
+      const col = item._collection || 'inventario';
+      const docRef = doc(db, col, item.id);
+      await updateDoc(docRef, { quantidade: Math.max(0, currentQty - qty) });
+
+      // 3. Resetar form
+      setSelectedItemId('');
+      setVendedorName('');
+      setClienteName('');
+      setBaixaQty('');
+      setBaixaReason('');
+      showToast('Baixa de estoque registrada com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Erro ao registrar baixa no estoque.');
+    } finally {
+      setIsSubmittingBaixa(false);
+    }
+  };
+
+  const handleDeleteBaixa = async (baixa: any) => {
+    if (!confirm(`Deseja realmente estornar a retirada de ${baixa.quantidade}x "${baixa.itemName}" pelo vendedor ${baixa.vendedor}? O saldo será devolvido ao estoque.`)) {
+      return;
+    }
+
+    try {
+      // 1. Achar o item de estoque correspondente
+      const item = inventoryItems.find(i => i.id === baixa.itemId);
+      if (item) {
+        const col = item._collection || baixa.itemCollection || 'inventario';
+        const docRef = doc(db, col, item.id);
+        const currentQty = Number(item.quantidade) || 0;
+        await updateDoc(docRef, { quantidade: currentQty + baixa.quantidade });
+      } else {
+        showToast('Aviso: O item original do estoque não existe mais, mas o registro de baixa foi removido.');
+      }
+
+      // 2. Deletar registro de baixa
+      await deleteDoc(doc(db, 'baixas_vendedores', baixa.id));
+      showToast('Baixa estornada com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Erro ao estornar a baixa de estoque.');
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    if (dateStr.includes('-')) {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return dateStr;
+  };
+
+  // totals for display
+  const totalVolumeEstoque = inventoryItems.reduce((acc, i) => acc + (Number(i.quantidade) || 0), 0);
+  const valorTotalEstoque = inventoryItems.reduce((acc, i) => acc + ((Number(i.quantidade) || 0) * (Number(i.custo_unitario) || 0)), 0);
+
   return (
-    <div className="w-full px-6 lg:px-12 xl:px-16 py-8 relative z-10">
+    <div className="w-full px-6 lg:px-12 xl:px-16 py-8 relative z-10 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div className="flex items-center space-x-4">
@@ -182,90 +344,403 @@ export function InventarioTab({ darkMode, inventoryItems, showToast }: Inventari
             <Package className="h-5 w-5 text-indigo-500" />
           </div>
           <div>
-            <h2 className={`text-xl font-bold font-display ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Gestão de Inventário</h2>
-            <p className={`text-xs font-medium mt-0.5 ${darkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>{filtered.length} itens encontrados</p>
+            <h2 className={`text-xl font-bold font-display ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Gestão de Estoque</h2>
+            <p className={`text-xs font-medium mt-0.5 ${darkMode ? 'text-zinc-500' : 'text-zinc-550'}`}>
+              Volume total: <span className="font-extrabold">${totalVolumeEstoque} unidades</span> | Valor estimado: <span className="font-extrabold text-emerald-500">R$ ${valorTotalEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </p>
           </div>
         </div>
-        <button onClick={() => setIsOpen(true)} className={btnPrimary}>
-          <Plus className="h-4 w-4" />
-          <span>Novo Item</span>
+        
+        {activeSubTab === 'estoque' && (
+          <button onClick={() => setIsOpen(true)} className={btnPrimary}>
+            <Plus className="h-4 w-4" />
+            <span>Novo Item</span>
+          </button>
+        )}
+      </div>
+
+      {/* Internal Subtabs Navigation */}
+      <div className="flex border-b border-slate-200/40 dark:border-white/5 mb-8">
+        <button
+          onClick={() => setActiveSubTab('estoque')}
+          className={`pb-4 px-6 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-[2px] ${
+            activeSubTab === 'estoque'
+              ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-550 dark:hover:text-zinc-300'
+          }`}
+        >
+          Estoque Atual
+        </button>
+        <button
+          onClick={() => setActiveSubTab('vendedores')}
+          className={`pb-4 px-6 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-[2px] ${
+            activeSubTab === 'vendedores'
+              ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-550 dark:hover:text-zinc-300'
+          }`}
+        >
+          Saídas para Vendedores
+        </button>
+        <button
+          onClick={() => setActiveSubTab('eventos')}
+          className={`pb-4 px-6 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-[2px] ${
+            activeSubTab === 'eventos'
+              ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-550 dark:hover:text-zinc-300'
+          }`}
+        >
+          Itens em Eventos
         </button>
       </div>
 
-      {/* Filters */}
-      <div className={`flex flex-col sm:flex-row gap-3 mb-6 p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar item..." className={`${inputCls(darkMode)} pl-9`} />
-        </div>
-        <select value={filterCol} onChange={e => setFilterCol(e.target.value)} className={`${inputCls(darkMode)} w-full sm:w-48`}>
-          <option value="todos">Todos os tipos</option>
-          <option value="inventario">Inventário</option>
-          <option value="brindes">Brindes</option>
-          <option value="uniformes">Uniformes</option>
-          <option value="estoque">Estoque</option>
-        </select>
-      </div>
-
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        {Object.entries(collectionLabels).map(([key, label]) => {
-          const count = inventoryItems.filter(i => i._collection === key).length;
-          return (
-            <div key={key} className={`p-4 rounded-xl border text-center ${darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <p className={`text-2xl font-black font-display ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{count}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mt-1">{label}</p>
+      {/* SUBTAB CONTENT 1: ESTOQUE ATUAL */}
+      {activeSubTab === 'estoque' && (
+        <div className="space-y-6">
+          {/* Filters */}
+          <div className={`flex flex-col sm:flex-row gap-3 p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar item no estoque..." className={`${inputCls(darkMode)} pl-9`} />
             </div>
-          );
-        })}
-      </div>
+            <select value={filterCol} onChange={e => setFilterCol(e.target.value)} className={`${inputCls(darkMode)} w-full sm:w-48`}>
+              <option value="todos">Todos os tipos</option>
+              <option value="inventario">Inventário</option>
+              <option value="brindes">Brindes</option>
+              <option value="uniformes">Uniformes</option>
+              <option value="estoque">Estoque</option>
+            </select>
+          </div>
 
-      {/* Items Grid */}
-      {filtered.length === 0 ? (
-        <EmptyState
-          darkMode={darkMode}
-          icon={Package}
-          title={search !== '' || filterCol !== 'todos' ? 'Nenhum resultado encontrado' : 'Inventário vazio'}
-          description={search !== '' || filterCol !== 'todos' ? `Não encontramos itens correspondentes a sua busca.` : 'Adicione itens como brindes, uniformes e materiais para começar.'}
-          actionLabel="Novo Item"
-          onAction={() => setIsOpen(true)}
-          isFilterActive={search !== '' || filterCol !== 'todos'}
-          onClearFilters={() => { setSearch(''); setFilterCol('todos'); }}
-        />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(item => (
-            <div key={item.id} className={cardCls(darkMode)}>
-              <div className="flex items-start justify-between mb-3">
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider border ${collectionColors[item._collection] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
-                  {collectionLabels[item._collection] || item._collection}
-                </span>
-                <div className="flex items-center space-x-1">
-                  <button onClick={() => handleEdit(item)} className={`p-1.5 rounded-lg ${darkMode ? 'hover:bg-zinc-700' : 'hover:bg-slate-100'} transition-colors`}>
-                    <Edit3 className="h-3.5 w-3.5 text-zinc-400" />
-                  </button>
-                  <button onClick={() => handleDelete(item)} className={`p-1.5 rounded-lg ${darkMode ? 'hover:bg-rose-500/10' : 'hover:bg-rose-50'} transition-colors`}>
-                    <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-                  </button>
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-fade-in">
+            {Object.entries(collectionLabels).map(([key, label]) => {
+              const itemsOfCol = inventoryItems.filter(i => i._collection === key);
+              const count = itemsOfCol.length;
+              const totalColQty = itemsOfCol.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+              return (
+                <div key={key} className={`p-4 rounded-xl border text-center ${darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
+                  <p className={`text-xl font-black font-display ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{count}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mt-1">{label}</p>
+                  <p className="text-[9px] font-semibold text-zinc-500 mt-0.5">{totalColQty} unidades</p>
                 </div>
-              </div>
-              <h3 className={`font-bold text-sm font-display mb-1 ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{item.nome}</h3>
-              {item.descricao && <p className="text-[11px] text-zinc-400 mb-3 leading-relaxed line-clamp-2">{item.descricao}</p>}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200/40 dark:border-white/5">
-                <div className="flex items-center space-x-1.5">
-                  <Tag className="h-3.5 w-3.5 text-zinc-400" />
-                  <span className={`text-xs font-bold ${darkMode ? 'text-zinc-200' : 'text-zinc-700'}`}>{item.quantidade ?? '-'} {item.unidade || 'un'}</span>
-                </div>
-                {item.custo_unitario > 0 && (
-                  <span className="text-xs font-bold text-emerald-500">R$ {Number(item.custo_unitario).toFixed(2)}</span>
-                )}
-              </div>
+              );
+            })}
+          </div>
+
+          {/* Items Grid */}
+          {filteredItems.length === 0 ? (
+            <EmptyState
+              darkMode={darkMode}
+              icon={Package}
+              title={search !== '' || filterCol !== 'todos' ? 'Nenhum resultado encontrado' : 'Inventário vazio'}
+              description={search !== '' || filterCol !== 'todos' ? `Não encontramos itens correspondentes a sua busca.` : 'Adicione itens como brindes, uniformes e materiais para começar.'}
+              actionLabel="Novo Item"
+              onAction={() => setIsOpen(true)}
+              isFilterActive={search !== '' || filterCol !== 'todos'}
+              onClearFilters={() => { setSearch(''); setFilterCol('todos'); }}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredItems.map(item => {
+                const totalItemVal = (Number(item.quantidade) || 0) * (Number(item.custo_unitario) || 0);
+                return (
+                  <div key={item.id} className={cardCls(darkMode)}>
+                    <div className="flex items-start justify-between mb-3">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider border ${collectionColors[item._collection] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
+                        {collectionLabels[item._collection] || item._collection}
+                      </span>
+                      <div className="flex items-center space-x-1">
+                        <button onClick={() => handleEdit(item)} className={`p-1.5 rounded-lg ${darkMode ? 'hover:bg-zinc-700' : 'hover:bg-slate-100'} transition-colors`}>
+                          <Edit3 className="h-3.5 w-3.5 text-zinc-400" />
+                        </button>
+                        <button onClick={() => handleDelete(item)} className={`p-1.5 rounded-lg ${darkMode ? 'hover:bg-rose-500/10' : 'hover:bg-rose-50'} transition-colors`}>
+                          <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                        </button>
+                      </div>
+                    </div>
+                    <h3 className={`font-bold text-sm font-display mb-1 ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{item.nome}</h3>
+                    {item.descricao && <p className="text-[11px] text-zinc-400 mb-3 leading-relaxed line-clamp-2">{item.descricao}</p>}
+                    
+                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-200/40 dark:border-white/5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-400 font-medium flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Saldo:</span>
+                        <span className={`font-bold ${item.quantidade <= 5 ? 'text-amber-500' : darkMode ? 'text-zinc-200' : 'text-zinc-700'}`}>
+                          {item.quantidade ?? '-'} {item.unidade || 'un'}
+                          {item.quantidade <= 5 && <span className="text-[8px] font-black tracking-wider uppercase ml-1.5 p-0.5 rounded bg-amber-500/10 border border-amber-500/10">Baixo</span>}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-400 font-medium">Custo Unitário:</span>
+                        <span className="font-bold text-zinc-500 dark:text-zinc-300">R$ {Number(item.custo_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+
+                      {totalItemVal > 0 && (
+                        <div className="flex items-center justify-between text-xs pt-1.5 border-t border-dashed border-slate-200/40 dark:border-white/5">
+                          <span className="text-zinc-400 font-medium">Valor Total:</span>
+                          <span className="font-extrabold text-emerald-500">R$ {totalItemVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      {/* Modal */}
+      {/* SUBTAB CONTENT 2: SAÍDAS PARA VENDEDORES */}
+      {activeSubTab === 'vendedores' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in-up">
+          {/* Form Column */}
+          <div className="lg:col-span-1">
+            <div className={cardCls(darkMode)}>
+              <div className="flex items-center space-x-2.5 mb-5 border-b border-slate-200/40 dark:border-white/5 pb-4">
+                <ArrowRightLeft className="h-4 w-4 text-indigo-500" />
+                <h3 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Nova Baixa (Reunião/Brinde)</h3>
+              </div>
+
+              <form onSubmit={handleCreateBaixa} className="space-y-4">
+                <div>
+                  <label className={labelCls}>Selecionar Item do Estoque *</label>
+                  <select
+                    value={selectedItemId}
+                    onChange={e => setSelectedItemId(e.target.value)}
+                    className={inputCls(darkMode)}
+                    required
+                  >
+                    <option value="">Selecione um item com saldo...</option>
+                    {sortedItemsForSelect.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.nome} (Saldo: {item.quantidade} {item.unidade || 'un'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Nome do Vendedor *</label>
+                  <input
+                    type="text"
+                    value={vendedorName}
+                    onChange={e => setVendedorName(e.target.value)}
+                    placeholder="Ex: Carlos Albuquerque"
+                    className={inputCls(darkMode)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Cliente / Empresa Destino *</label>
+                  <input
+                    type="text"
+                    value={clienteName}
+                    onChange={e => setClienteName(e.target.value)}
+                    placeholder="Ex: Empresa Parceira Ltda"
+                    className={inputCls(darkMode)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Quantidade *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={baixaQty}
+                      onChange={e => setBaixaQty(e.target.value === '' ? '' : parseInt(e.target.value) || 1)}
+                      placeholder="0"
+                      className={inputCls(darkMode)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Data da Saída *</label>
+                    <input
+                      type="date"
+                      value={baixaDate}
+                      onChange={e => setBaixaDate(e.target.value)}
+                      className={inputCls(darkMode)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Observações / Motivo (Opcional)</label>
+                  <textarea
+                    rows={3}
+                    value={baixaReason}
+                    onChange={e => setBaixaReason(e.target.value)}
+                    placeholder="Ex: Reunião comercial estratégica de kick-off..."
+                    className={`${inputCls(darkMode)} resize-none`}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingBaixa}
+                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md"
+                >
+                  {isSubmittingBaixa ? <span>Registrando...</span> : <span>Confirmar e dar Baixa</span>}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* History Column */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Histórico de Retiradas</h3>
+              <div className="relative w-full max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+                <input
+                  value={vendedorSearch}
+                  onChange={e => setVendedorSearch(e.target.value)}
+                  placeholder="Pesquisar por vendedor ou cliente..."
+                  className={`${inputCls(darkMode)} pl-8.5 py-2`}
+                />
+              </div>
+            </div>
+
+            <div className={`border rounded-2xl overflow-hidden ${darkMode ? 'bg-zinc-900/10 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="overflow-x-auto font-sans">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className={`border-b font-bold ${darkMode ? 'bg-zinc-950/40 border-white/5 text-zinc-400' : 'bg-slate-50/50 border-slate-200 text-zinc-500'}`}>
+                      <th className="p-4">Data</th>
+                      <th className="p-4">Vendedor</th>
+                      <th className="p-4">Item</th>
+                      <th className="p-4 text-center">Qtd</th>
+                      <th className="p-4">Cliente/Destino</th>
+                      <th className="p-4">Motivo</th>
+                      <th className="p-4 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBaixas.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center font-medium text-zinc-405">
+                          Nenhum registro de saída encontrado.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBaixas.map(b => (
+                        <tr key={b.id} className={`border-b ${darkMode ? 'border-white/5 text-zinc-300 hover:bg-white/5' : 'border-slate-100 text-zinc-700 hover:bg-slate-50'} transition-colors`}>
+                          <td className="p-4 whitespace-nowrap font-medium">{formatDate(b.data)}</td>
+                          <td className="p-4 whitespace-nowrap font-bold text-indigo-500">{b.vendedor}</td>
+                          <td className="p-4 font-semibold">{b.itemName}</td>
+                          <td className="p-4 text-center whitespace-nowrap font-extrabold">{b.quantidade}</td>
+                          <td className="p-4 font-medium">{b.cliente}</td>
+                          <td className="p-4 text-zinc-400 italic max-w-xs truncate" title={b.motivo}>{b.motivo || '-'}</td>
+                          <td className="p-4 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => handleDeleteBaixa(b)}
+                              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-500 transition-colors"
+                              title="Estornar baixa"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB CONTENT 3: ITENS EM EVENTOS */}
+      {activeSubTab === 'eventos' && (
+        <div className="space-y-4 animate-fade-in-up">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h3 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Extrato Consolidado por Eventos</h3>
+            
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <input
+                value={eventSearch}
+                onChange={e => setEventSearch(e.target.value)}
+                placeholder="Pesquisar por item ou evento..."
+                className={`${inputCls(darkMode)} pl-8.5 py-2`}
+              />
+            </div>
+          </div>
+
+          <div className={`border rounded-2xl overflow-hidden ${darkMode ? 'bg-zinc-900/10 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className={`border-b font-bold ${darkMode ? 'bg-zinc-950/40 border-white/5 text-zinc-400' : 'bg-slate-50/50 border-slate-200 text-zinc-500'}`}>
+                    <th className="p-4">Item</th>
+                    <th className="p-4">Coleção</th>
+                    <th className="p-4 text-center">Qtd Alocada</th>
+                    <th className="p-4">Evento Vinculado</th>
+                    <th className="p-4">Data Evento</th>
+                    <th className="p-4 text-center">Status</th>
+                    <th className="p-4 text-center">Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {eventGifts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center font-medium text-zinc-405">
+                        Nenhum brinde alocado em eventos localizado.
+                      </td>
+                    </tr>
+                  ) : (
+                    eventGifts.map(g => {
+                      const isDelivered = g.eventStatus === 'Concluído';
+                      return (
+                        <tr key={g.id} className={`border-b ${darkMode ? 'border-white/5 text-zinc-300 hover:bg-white/5' : 'border-slate-100 text-zinc-700 hover:bg-slate-50'} transition-colors`}>
+                          <td className="p-4 font-bold text-zinc-800 dark:text-zinc-100">{g.itemName}</td>
+                          <td className="p-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${collectionColors[g.category] || 'bg-zinc-100 text-zinc-500'}`}>
+                              {collectionLabels[g.category] || g.category}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center whitespace-nowrap font-extrabold">{g.quantidade}</td>
+                          <td className="p-4 font-medium text-indigo-500">{g.eventName}</td>
+                          <td className="p-4 whitespace-nowrap font-medium">{formatDate(g.eventDate)}</td>
+                          <td className="p-4 text-center whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              g.eventStatus === 'Concluído' ? 'bg-emerald-500/10 text-emerald-500' :
+                              g.eventStatus === 'Confirmado' ? 'bg-indigo-500/10 text-indigo-500' :
+                              'bg-zinc-500/10 text-zinc-400'
+                            }`}>
+                              {g.eventStatus}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center whitespace-nowrap">
+                            {isDelivered ? (
+                              <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                <span>Entregue</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                                <Clock className="h-3 w-3 shrink-0" />
+                                <span>Reservado</span>
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Novo / Editar Item do Estoque */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-md transition-opacity duration-300" onClick={closeModal} />
@@ -335,7 +810,6 @@ export function InventarioTab({ darkMode, inventoryItems, showToast }: Inventari
     </div>
   );
 }
-
 /* ─────────────────────────────────────────────────────────────────
    FORNECEDORES TAB
 ───────────────────────────────────────────────────────────────── */
@@ -1471,6 +1945,317 @@ export function FinanceiroTab({ darkMode, events, onEditEvent, onViewEvent, show
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface TutorialTabProps {
+  darkMode: boolean;
+}
+
+export function TutorialTab({ darkMode }: TutorialTabProps) {
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [expandedStep, setExpandedStep] = useState<string | null>(null);
+
+  const categories = [
+    {
+      id: 'eventos',
+      title: 'Gestão de Eventos / Pautas',
+      desc: 'Como cadastrar, planejar, alocar brindes e obter sourcing automático do Google AI Studio.',
+      icon: Calendar,
+      color: 'from-blue-500 to-indigo-500',
+      textColor: 'text-blue-500 dark:text-blue-400',
+      bgColor: 'bg-blue-500/10',
+      steps: [
+        {
+          id: 'ev-1',
+          title: 'Abrir o Formulário de Criação',
+          desc: 'Clique em "Adicionar Pauta" no calendário geral ou em "Registrar Pauta / Evento" no topo do Painel Admin para abrir o formulário.',
+          tip: 'Campos marcados com asterisco (*) como "Nome do Evento", "Categoria" e "Data Inicial" são de preenchimento obrigatório.'
+        },
+        {
+          id: 'ev-2',
+          title: 'Sourcing Automático com Inteligência Artificial',
+          desc: 'Para acelerar o preenchimento, digite o nome do evento e clique em "Buscar no Google" ao lado do campo do título. A ferramenta buscará automaticamente informações como Público-Alvo, Descrição, Localização e Imagens relacionadas.',
+          tip: 'Verifique as informações buscadas antes de salvar para garantir que estão alinhadas com as diretrizes do evento.'
+        },
+        {
+          id: 'ev-3',
+          title: 'Alocação de Brindes e Logística',
+          desc: 'Navegue até a aba "Logística & Listas" dentro do modal de eventos. Selecione a quantidade e os itens de estoque (brindes, uniformes) que serão destinados a esse evento.',
+          warning: 'Esta ação criará uma reserva automática no estoque, e os itens constarão como "Reservados" até a conclusão do evento.'
+        },
+        {
+          id: 'ev-4',
+          title: 'Salvar e Acompanhar Status',
+          desc: 'Escolha o status do evento (planejado, confirmado, concluído) e clique em "Confirmar". O evento aparecerá imediatamente no calendário corporativo.',
+          tip: 'Quando o evento mudar de status para "Concluído", a reserva no estoque é automaticamente confirmada como baixada ("Entregue").'
+        }
+      ]
+    },
+    {
+      id: 'financeiro',
+      title: 'Gestão Financeira V2',
+      desc: 'Controle de orçamentos aprovados, extratos detalhados de despesas e importação de planilhas Excel.',
+      icon: DollarSign,
+      color: 'from-emerald-500 to-teal-500',
+      textColor: 'text-emerald-500 dark:text-emerald-400',
+      bgColor: 'bg-emerald-500/10',
+      steps: [
+        {
+          id: 'fin-1',
+          title: 'Definir o Orçamento (Budget) do Evento',
+          desc: 'Ao criar ou editar um evento, acesse a aba "Financeiro". Defina o campo "Orçamento Total" para estabelecer o limite financeiro do projeto.',
+          tip: 'Essa aba está disponível apenas para administradores (Role Admin) e não é exibida para outros usuários.'
+        },
+        {
+          id: 'fin-2',
+          title: 'Inserir Lançamentos Manuais',
+          desc: 'Adicione despesas manuais especificando a Conta, Data de Lançamento, Data de Vencimento, Fornecedor, Descrição e o Valor em R$.',
+          tip: 'O "Custo Real" do evento é calculado dinamicamente pela somatória de todos os lançamentos de despesas.'
+        },
+        {
+          id: 'fin-3',
+          title: 'Importar Planilha Excel',
+          desc: 'Clique em "Importar Excel" na aba "Financeiro" e faça o upload de uma planilha de gastos. O sistema lerá as colunas de gastos e as importará automaticamente.',
+          warning: 'Se o Excel possuir múltiplas abas, o sistema abrirá um seletor para você escolher qual aba corresponde a este evento antes de confirmar.'
+        },
+        {
+          id: 'fin-4',
+          title: 'Análise de Orçamento vs Custo Real',
+          desc: 'Visualize o custo real consolidado na tela de detalhes do evento ou no dashboard financeiro principal.',
+          warning: 'Se o Custo Real ultrapassar o Orçamento Aprovado, o valor final ficará destacado em vermelho como aviso visual de estouro de budget.'
+        }
+      ]
+    },
+    {
+      id: 'estoque',
+      title: 'Estoque & Retiradas V5',
+      desc: 'Gerenciamento de saldo atual, saídas para vendedores em reuniões e reversão/estorno de baixas.',
+      icon: Package,
+      color: 'from-amber-500 to-orange-500',
+      textColor: 'text-amber-500 dark:text-amber-400',
+      bgColor: 'bg-amber-500/10',
+      steps: [
+        {
+          id: 'est-1',
+          title: 'Cadastrar e Monitorar Itens',
+          desc: 'Acesse a aba "Estoque Atual" no painel. Adicione novos brindes ou uniformes especificando Nome, Categoria (brindes, uniformes, etc.), Quantidade e Custo Unitário.',
+          tip: 'O sistema exibe o valor financeiro do inventário (Saldo × Custo) e destaca com alerta amarelo itens com baixo estoque (<= 5 unidades).'
+        },
+        {
+          id: 'est-2',
+          title: 'Lançar Saídas para Vendedores (Baixas)',
+          desc: 'Na aba "Saídas para Vendedores", use o formulário para registrar a retirada de brindes por consultores comerciais para reuniões corporativas.',
+          warning: 'O sistema valida a retirada em tempo real e não permitirá dar baixa de uma quantidade maior que o saldo disponível em estoque.'
+        },
+        {
+          id: 'est-3',
+          title: 'Histórico de Retiradas e Estorno (Reversão)',
+          desc: 'Acompanhe todas as saídas na tabela de histórico de vendedores. Se a reunião for cancelada ou houver erro no lançamento, clique em "Estornar" (ícone de lixeira no histórico).',
+          tip: 'O estorno remove a baixa comercial do banco e devolve imediatamente as quantidades correspondentes de volta ao estoque do item.'
+        },
+        {
+          id: 'est-4',
+          title: 'Rastrear Itens Vinculados a Eventos',
+          desc: 'Na aba "Itens em Eventos", veja uma tabela consolidada de todos os brindes alocados em eventos gerais com data e badge de situação.',
+          tip: 'Badge "Reservado" indica que o item está separado para um evento futuro. Badge "Entregue" indica que o evento foi concluído e o saldo foi baixado.'
+        }
+      ]
+    },
+    {
+      id: 'usuarios',
+      title: 'Controle de Usuários & Acessos',
+      desc: 'Gerenciamento de novas contas, atribuição de privilégios (Admin / Approved) e remoção de usuários.',
+      icon: Users,
+      color: 'from-violet-500 to-purple-500',
+      textColor: 'text-violet-500 dark:text-violet-400',
+      bgColor: 'bg-violet-500/10',
+      steps: [
+        {
+          id: 'usr-1',
+          title: 'Fluxo de Entrada de Usuários',
+          desc: 'Ao se cadastrar, todo novo colaborador entra com a função padrão "pending" (Pendente), ficando bloqueado de ver o calendário geral de pautas.',
+          tip: 'Isto evita que pessoas não autorizadas acessem os cronogramas de marketing da empresa.'
+        },
+        {
+          id: 'usr-2',
+          title: 'Aprovação e Níveis de Acesso',
+          desc: 'Na aba "Usuários", localize o usuário pendente na tabela e altere seu perfil (Role): "Approved" (Aprovado - acesso geral de leitura e edição comum) ou "Admin" (Administrador - acesso total, financeiro e painel administrativo).',
+          warning: 'Qualquer alteração de role é gravada no Firestore e reflete imediatamente no navegador do colaborador.'
+        },
+        {
+          id: 'usr-3',
+          title: 'Exclusão de Contas',
+          desc: 'Se um colaborador for desligado da empresa ou cadastrado por engano, você pode clicar no botão "Excluir" (ícone de lixeira) ao lado do perfil dele na tabela de usuários.',
+          warning: 'Esta ação exclui permanentemente o registro de acesso do usuário no banco de dados. Confirme com cuidado.'
+        }
+      ]
+    }
+  ];
+
+  const handleToggleCategory = (catId: string) => {
+    if (activeCategory === catId) {
+      setActiveCategory(null);
+      setExpandedStep(null);
+    } else {
+      setActiveCategory(catId);
+      setExpandedStep(null);
+    }
+  };
+
+  const handleToggleStep = (stepId: string) => {
+    setExpandedStep(expandedStep === stepId ? null : stepId);
+  };
+
+  return (
+    <div className="space-y-8 animate-fade-in-up">
+      {/* HEADER */}
+      <div className="flex items-center space-x-3 pb-6 border-b border-slate-200/40 dark:border-white/5">
+        <div className={`p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-500`}>
+          <BookOpen className="h-6 w-6" />
+        </div>
+        <div>
+          <h2 className={`text-xl font-bold font-display ${darkMode ? 'text-white' : 'text-zinc-900'}`}>
+            Manual do Administrador
+          </h2>
+          <p className="text-xs text-zinc-500 mt-1">
+            Guia passo a passo interativo de todas as ferramentas e fluxos exclusivos do painel administrativo.
+          </p>
+        </div>
+      </div>
+
+      {/* BENTO GRID OF CATEGORIES */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {categories.map((cat) => {
+          const IconComponent = cat.icon;
+          const isSelected = activeCategory === cat.id;
+          return (
+            <div
+              key={cat.id}
+              onClick={() => handleToggleCategory(cat.id)}
+              className={`p-6 rounded-3xl border transition-all duration-300 cursor-pointer flex flex-col justify-between group relative overflow-hidden ${
+                isSelected
+                  ? `h-fit border-indigo-500/30 ${darkMode ? 'bg-zinc-905/80' : 'bg-slate-50/90 shadow-md shadow-indigo-500/5'}`
+                  : `h-36 ${
+                      darkMode
+                        ? 'bg-zinc-900/40 border-white/5 hover:border-white/10 hover:bg-zinc-900/60 shadow-sm'
+                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/55 shadow-sm'
+                    }`
+              }`}
+            >
+              {/* Abstract decorative shape in background */}
+              <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-10 blur-xl bg-gradient-to-br ${cat.color} group-hover:scale-125 transition-transform duration-500`} />
+
+              <div className="space-y-6 relative z-10 w-full">
+                <div className="flex items-start justify-between w-full">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-3 rounded-2xl ${cat.bgColor} ${cat.textColor} shrink-0`}>
+                      <IconComponent className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className={`text-sm font-bold tracking-tight ${darkMode ? 'text-zinc-100' : 'text-zinc-850'}`}>
+                        {cat.title}
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-1 leading-relaxed font-normal">
+                        {cat.desc}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shrink-0 ${
+                    isSelected
+                      ? 'bg-indigo-500/15 text-indigo-500'
+                      : darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-slate-100 text-zinc-500'
+                  }`}>
+                    {isSelected ? 'Fechar' : 'Visualizar'}
+                  </span>
+                </div>
+
+                {/* Accordion steps rendered INSIDE the card */}
+                {isSelected && (
+                  <div 
+                    onClick={(e) => e.stopPropagation()} 
+                    className="space-y-3 pt-6 border-t border-slate-200/50 dark:border-white/5 cursor-default w-full"
+                  >
+                    <div className="space-y-3">
+                      {cat.steps.map((step, idx) => {
+                        const isStepExpanded = expandedStep === step.id;
+                        return (
+                          <div
+                            key={step.id}
+                            className={`rounded-2xl border transition-all overflow-hidden ${
+                              isStepExpanded
+                                ? darkMode
+                                  ? 'bg-zinc-950 border-indigo-500/20 shadow-lg'
+                                  : 'bg-white border-slate-300 shadow-md'
+                                : darkMode
+                                  ? 'bg-zinc-900/80 border-white/5 hover:bg-zinc-900'
+                                  : 'bg-white border-slate-205 hover:bg-slate-50/80 shadow-sm'
+                            }`}
+                          >
+                            {/* Header trigger */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStep(step.id)}
+                              className="w-full px-5 py-4 flex items-center justify-between text-left cursor-pointer"
+                            >
+                              <div className="flex items-center space-x-3">
+                                <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-md ${
+                                  darkMode ? 'bg-zinc-850 text-indigo-400' : 'bg-slate-100 text-indigo-650'
+                                }`}>
+                                  Passo {idx + 1}
+                                </span>
+                                <span className={`text-xs font-bold ${darkMode ? 'text-zinc-200' : 'text-zinc-805'}`}>
+                                  {step.title}
+                                </span>
+                              </div>
+                              {isStepExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-zinc-400" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-zinc-400" />
+                              )}
+                            </button>
+
+                            {/* Content */}
+                            {isStepExpanded && (
+                              <div className="px-5 pb-5 pt-1 space-y-4 border-t border-slate-200/30 dark:border-white/5 animate-fade-in">
+                                <p className="text-xs text-zinc-650 dark:text-zinc-350 leading-relaxed font-normal">
+                                  {step.desc}
+                                </p>
+
+                                {/* Optional custom visual Callout boxes (Tip or Warning) */}
+                                {step.tip && (
+                                  <div className="p-3.5 rounded-xl border border-emerald-500/10 bg-emerald-500/5 flex items-start space-x-2.5">
+                                    <Info className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                                    <div className="text-[11px] leading-relaxed">
+                                      <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block mb-0.5">Dica Prática</span>
+                                      <span className="text-zinc-600 dark:text-zinc-300 font-medium">{step.tip}</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {step.warning && (
+                                  <div className="p-3.5 rounded-xl border border-rose-500/15 bg-rose-500/5 flex items-start space-x-2.5">
+                                    <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                                    <div className="text-[11px] leading-relaxed">
+                                      <span className="font-bold text-rose-650 dark:text-rose-400 uppercase tracking-wider block mb-0.5">Atenção / Regra</span>
+                                      <span className="text-zinc-650 dark:text-zinc-300 font-medium">{step.warning}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
