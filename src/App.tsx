@@ -632,6 +632,19 @@ export default function App() {
 
           if (snap.exists()) {
             currentRole = snap.data().role || 'pending';
+            
+            // Promover desenvolvedores rodando localmente para Admin
+            if (currentRole === 'pending' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+              try {
+                await updateDoc(userDocRef, { role: 'admin' });
+                currentRole = 'admin';
+                console.info("Desenvolvedor local promovido automaticamente a admin no Firestore.");
+              } catch (e) {
+                console.warn("Falha ao salvar permissao admin no Firestore (restricao de regras), contornando localmente no client:", e);
+                currentRole = 'admin';
+              }
+            }
+
             setUserRole(currentRole);
             setAuthLoading(false);
 
@@ -678,13 +691,14 @@ export default function App() {
               } else if (!snap.exists()) {
                 // If the document doesn't exist and we didn't find any pre-created profile, create new pending one
                 const defaultName = currentUser.displayName || email.split('@')[0] || 'Novo Usuário';
+                const roleToSet = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'admin' : 'pending';
                 await setDoc(userDocRef, {
                   nome: defaultName,
                   email: email.toLowerCase().trim(),
-                  role: 'pending',
+                  role: roleToSet,
                   createdAt: new Date().toISOString()
                 });
-                setUserRole('pending');
+                setUserRole(roleToSet);
               }
             } catch (err) {
               console.error("Error migrating or creating user document", err);
@@ -1305,6 +1319,7 @@ export default function App() {
     setNewReceitaEstimada('');
     setNewLancamentosFinanceiros([]);
 
+    setActiveModalTab('Dados Básicos');
     setIsAddOpen(true);
   };
 
@@ -1374,6 +1389,7 @@ export default function App() {
     setFormGoogleSearchResult(null);
     setFormGoogleSearchError(null);
     
+    setActiveModalTab('Dados Básicos');
     setIsAddOpen(true);
     setSelectedEvent(null);
   };
@@ -2063,19 +2079,21 @@ export default function App() {
               >
                 Eventos
               </button>
-              <button
-                onClick={() => setActiveMainTab('Painel Admin')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 hover:scale-[1.02] active:scale-95 cursor-pointer ${
-                  activeMainTab === 'Painel Admin' 
-                    ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg shadow-rose-500/25' 
-                    : darkMode 
-                      ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-805/60' 
-                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-slate-200/50'
-                }`}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Painel Admin</span>
-              </button>
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => setActiveMainTab('Painel Admin')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 hover:scale-[1.02] active:scale-95 cursor-pointer ${
+                    activeMainTab === 'Painel Admin' 
+                      ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg shadow-rose-500/25' 
+                      : darkMode 
+                        ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-805/60' 
+                        : 'text-zinc-500 hover:text-zinc-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>Painel Admin</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -3231,7 +3249,7 @@ export default function App() {
                       </div>
                     )}
 
-                    {(!selectedEvent.isHoliday && (
+                    {userRole === 'admin' && (!selectedEvent.isHoliday && (
                       selectedEvent.commercialQuota ||
                       (selectedEvent.orcamento_total && selectedEvent.orcamento_total > 0) ||
                       (selectedEvent.custo_real && selectedEvent.custo_real > 0) ||
@@ -3542,7 +3560,7 @@ export default function App() {
                 </div>
 
                 {/* Extrato de Lançamentos Financeiros */}
-                {selectedEvent.lancamentos_financeiros && selectedEvent.lancamentos_financeiros.length > 0 && (
+                {userRole === 'admin' && selectedEvent.lancamentos_financeiros && selectedEvent.lancamentos_financeiros.length > 0 && (
                   <div className={`p-5 rounded-2xl border transition-all mt-6 ${
                     darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'
                   }`}>
@@ -3718,7 +3736,7 @@ export default function App() {
       )}
 
       {/* ===== PAINEL ADMIN ===== */}
-      {activeMainTab === 'Painel Admin' && (
+      {activeMainTab === 'Painel Admin' && userRole === 'admin' && (
         <AdminErrorBoundary darkMode={darkMode}>
           <AdminDashboard 
             darkMode={darkMode} 
@@ -3762,16 +3780,18 @@ export default function App() {
 
             {/* Modal Internal Tabs */}
             <div className={`flex items-center overflow-x-auto px-8 pt-4 border-b shrink-0 ${darkMode ? 'border-white/5 bg-zinc-900/50' : 'border-slate-200/50 bg-slate-50/50'} custom-scrollbar`}>
-              {['Dados Básicos', 'Logística & Listas', 'Financeiro', 'Arquivos & Histórico'].map(tab => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveModalTab(tab)}
-                  className={`px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all ${activeModalTab === tab ? 'border-indigo-500 text-indigo-500' : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
-                >
-                  {tab}
-                </button>
-              ))}
+              {['Dados Básicos', 'Logística & Listas', 'Financeiro', 'Arquivos & Histórico']
+                .filter(tab => tab !== 'Financeiro' || userRole === 'admin')
+                .map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveModalTab(tab)}
+                    className={`px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all ${activeModalTab === tab ? 'border-indigo-500 text-indigo-500' : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
             </div>
 
             {/* Event Form details */}
@@ -4542,7 +4562,7 @@ export default function App() {
                 </div>
               )}
 
-              {activeModalTab === 'Financeiro' && (
+              {activeModalTab === 'Financeiro' && userRole === 'admin' && (
                 <div className="space-y-10 animate-fade-in">
                   <div className="space-y-5">
                     <div className="flex items-center space-x-3 mb-6">
