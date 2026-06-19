@@ -18,9 +18,10 @@ import {
   Edit3,
   X,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  BookOpen
 } from 'lucide-react';
-import { InventarioTab, FornecedoresTab, ParticipantesTab, ViagensTab, EventosTab, FinanceiroTab } from './TabViews';
+import { InventarioTab, FornecedoresTab, ParticipantesTab, ViagensTab, EventosTab, FinanceiroTab, TutorialTab } from './TabViews';
 
 export function AdminDashboard({ 
   darkMode,
@@ -50,6 +51,7 @@ export function AdminDashboard({
   const [participantes, setParticipantes] = useState<any[]>([]);
   const [viagens, setViagens] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [baixasVendedores, setBaixasVendedores] = useState<any[]>([]);
 
   // States for Users Tab Redesign
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -128,9 +130,14 @@ export function AdminDashboard({
       setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('users'));
 
+    const unsubBaixas = onSnapshot(collection(db, 'baixas_vendedores'), (snap) => {
+      setBaixasVendedores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, logErr('baixas_vendedores'));
+
     return () => {
       unsubInv(); unsubBri(); unsubUni(); unsubEst();
       unsubForn(); unsubPart(); unsubViagens(); unsubUsers();
+      unsubBaixas();
     };
   }, []);
 
@@ -142,7 +149,8 @@ export function AdminDashboard({
     { id: 'Fornecedores', label: 'Fornecedores', icon: Truck },
     { id: 'Participantes', label: 'Participantes', icon: UserCheck },
     { id: 'Viagens', label: 'Logística de Viagens', icon: Plane },
-    { id: 'Usuarios', label: 'Usuários', icon: Users }
+    { id: 'Usuarios', label: 'Usuários', icon: Users },
+    { id: 'Tutorial', label: 'Manual do Admin', icon: BookOpen }
   ];
 
   // Helper for updating user role
@@ -642,7 +650,13 @@ export function AdminDashboard({
         )}
         {activeTab === 'Inventário' && (
           <div className="animate-fade-in-up">
-            <InventarioTab darkMode={darkMode} inventoryItems={inventoryItems} showToast={showToast} />
+            <InventarioTab 
+              darkMode={darkMode} 
+              inventoryItems={inventoryItems} 
+              events={events}
+              baixasVendedores={baixasVendedores}
+              showToast={showToast} 
+            />
           </div>
         )}
         {activeTab === 'Fornecedores' && (
@@ -975,6 +989,12 @@ export function AdminDashboard({
             </div>
           );
         })()}
+
+        {activeTab === 'Tutorial' && (
+          <div className="animate-fade-in-up">
+            <TutorialTab darkMode={darkMode} />
+          </div>
+        )}
 
       </div>
     </div>
