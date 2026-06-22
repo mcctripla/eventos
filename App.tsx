@@ -1916,8 +1916,12 @@ export default function App() {
   const activeViewIndex = viewOptions.findIndex(v => v.id === currentView);
 
   // Check if we are in public commercial request view
-  const isPublicRequestView = window.location.search.includes('view=solicitacao-brindes') || 
-                              window.location.hash.includes('solicitacao-brindes');
+  const isPublicRequestView = window.location.search.includes('solicitacao-brindes') || 
+                              window.location.search.includes('solicitacoes-brinde') ||
+                              window.location.hash.includes('solicitacao-brindes') ||
+                              window.location.hash.includes('solicitacoes-brinde') ||
+                              window.location.pathname.includes('solicitacao-brindes') ||
+                              window.location.pathname.includes('solicitacoes-brinde');
 
   if (isPublicRequestView) {
     return (
