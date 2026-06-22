@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
 import { 
@@ -19,7 +19,10 @@ import {
   X,
   CheckCircle2,
   DollarSign,
-  BookOpen
+  BookOpen,
+  TrendingUp,
+  MapPin,
+  AlertTriangle
 } from 'lucide-react';
 import { InventarioTab, FornecedoresTab, ParticipantesTab, ViagensTab, EventosTab, FinanceiroTab, TutorialTab } from './TabViews';
 
@@ -52,6 +55,7 @@ export function AdminDashboard({
   const [viagens, setViagens] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [baixasVendedores, setBaixasVendedores] = useState<any[]>([]);
+  const [solicitacoesList, setSolicitacoesList] = useState<any[]>([]);
 
   // States for Users Tab Redesign
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -134,12 +138,87 @@ export function AdminDashboard({
       setBaixasVendedores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('baixas_vendedores'));
 
+    const unsubSolicitacoes = onSnapshot(collection(db, 'solicitacoes_brindes'), (snap) => {
+      setSolicitacoesList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, logErr('solicitacoes_brindes'));
+
     return () => {
       unsubInv(); unsubBri(); unsubUni(); unsubEst();
       unsubForn(); unsubPart(); unsubViagens(); unsubUsers();
-      unsubBaixas();
+      unsubBaixas(); unsubSolicitacoes();
     };
   }, []);
+
+  // Computed values for enhanced event-related dashboard
+  const realEvents = useMemo(() => {
+    return (events || []).filter((e: any) => !e.isHoliday);
+  }, [events]);
+
+  const eventStats = useMemo(() => {
+    const totalEvents = realEvents.length;
+    const planejado = realEvents.filter((e: any) => e.status === 'planejado').length;
+    const confirmado = realEvents.filter((e: any) => e.status === 'confirmado').length;
+    const concluido = realEvents.filter((e: any) => e.status === 'concluido').length;
+
+    const totalBudget = realEvents.reduce((acc, e) => acc + (Number(e.orcamento_total) || 0), 0);
+    const totalActualCost = realEvents.reduce((acc, e) => acc + (Number(e.custo_real) || 0), 0);
+    const totalGiftsAllocated = realEvents.reduce((acc, e) => {
+      const gifts = e.brindes_alocados || [];
+      return acc + gifts.reduce((sum: number, g: any) => sum + (Number(g.qtd) || 0), 0);
+    }, 0);
+
+    return {
+      totalEvents,
+      planejado,
+      confirmado,
+      concluido,
+      totalBudget,
+      totalActualCost,
+      totalGiftsAllocated
+    };
+  }, [realEvents]);
+
+  const getEventDate = (evt: any): Date => {
+    if (!evt.date) return new Date();
+    if (typeof evt.date.toDate === 'function') return evt.date.toDate();
+    if (evt.date instanceof Date) return evt.date;
+    if (typeof evt.date === 'string') return new Date(evt.date);
+    if (evt.date.seconds) return new Date(evt.date.seconds * 1000);
+    return new Date();
+  };
+
+  const upcomingEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return [...realEvents]
+      .filter((e: any) => getEventDate(e) >= today)
+      .sort((a, b) => getEventDate(a).getTime() - getEventDate(b).getTime())
+      .slice(0, 5);
+  }, [realEvents]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    realEvents.forEach((e: any) => {
+      const cat = e.category || 'Outros';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [realEvents]);
+
+  const ufCounts = useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    realEvents.forEach((e: any) => {
+      if (e.uf) {
+        counts[e.uf] = (counts[e.uf] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .map(([uf, count]) => ({ uf, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [realEvents]);
 
   const adminTabs = [
     { id: 'Overview', label: 'Dashboard', icon: BarChart3 },
@@ -298,6 +377,115 @@ export function AdminDashboard({
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                 Acompanhe o volume de registros globais e métricas consolidadas dos módulos operacionais.
               </p>
+            </div>
+
+            {/* Section 1: Eventos & Finanças KPIs */}
+            <div className="mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-4 flex items-center gap-1.5 font-display">
+                <Activity className="h-4 w-4 text-indigo-500" />
+                Desempenho de Eventos & Indicadores Financeiros
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Event KPI 1: Total de Eventos */}
+              <div className={`p-6 rounded-3xl border transition-all hover:-translate-y-1 hover:shadow-xl relative overflow-hidden ${
+                darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="absolute -right-4 -top-4 opacity-[0.03] dark:opacity-[0.05]">
+                  <Calendar className="h-32 w-32" />
+                </div>
+                <div className="flex items-center space-x-3 mb-4 relative z-10">
+                  <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                    <Calendar className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Total de Eventos</h3>
+                </div>
+                <div className="relative z-10 flex items-baseline space-x-3">
+                  <span className="text-4xl font-extrabold font-display text-zinc-900 dark:text-white">{eventStats.totalEvents}</span>
+                  <div className="flex flex-wrap gap-1 text-[9px] font-bold">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">Pla: {eventStats.planejado}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500">Conf: {eventStats.confirmado}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">Conc: {eventStats.concluido}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Event KPI 2: Budget Aprovado Geral */}
+              <div className={`p-6 rounded-3xl border transition-all hover:-translate-y-1 hover:shadow-xl relative overflow-hidden ${
+                darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="absolute -right-4 -top-4 opacity-[0.03] dark:opacity-[0.05]">
+                  <DollarSign className="h-32 w-32" />
+                </div>
+                <div className="flex items-center space-x-3 mb-4 relative z-10">
+                  <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <DollarSign className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Budget Aprovado</h3>
+                </div>
+                <div className="relative z-10">
+                  <span className="text-2xl font-extrabold font-display text-zinc-900 dark:text-white">
+                    R$ {eventStats.totalBudget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Event KPI 3: Custo Real Acumulado */}
+              <div className={`p-6 rounded-3xl border transition-all hover:-translate-y-1 hover:shadow-xl relative overflow-hidden ${
+                darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="absolute -right-4 -top-4 opacity-[0.03] dark:opacity-[0.05]">
+                  <TrendingUp className="h-32 w-32" />
+                </div>
+                <div className="flex items-center space-x-3 mb-4 relative z-10">
+                  <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                    <TrendingUp className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Custo Real Acumulado</h3>
+                </div>
+                <div className="relative z-10 flex flex-col">
+                  <span className="text-2xl font-extrabold font-display text-zinc-900 dark:text-white">
+                    R$ {eventStats.totalActualCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  {eventStats.totalBudget > 0 && (
+                    <span className={`text-[10px] font-bold mt-1 ${
+                      eventStats.totalActualCost > eventStats.totalBudget ? 'text-rose-500 animate-pulse' : 'text-zinc-400 dark:text-zinc-500'
+                    }`}>
+                      {((eventStats.totalActualCost / eventStats.totalBudget) * 100).toFixed(1)}% do budget utilizado
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Event KPI 4: Brindes & Uniformes Alocados */}
+              <div className={`p-6 rounded-3xl border transition-all hover:-translate-y-1 hover:shadow-xl relative overflow-hidden ${
+                darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="absolute -right-4 -top-4 opacity-[0.03] dark:opacity-[0.05]">
+                  <Package className="h-32 w-32" />
+                </div>
+                <div className="flex items-center space-x-3 mb-4 relative z-10">
+                  <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <Package className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Itens Alocados</h3>
+                </div>
+                <div className="relative z-10">
+                  <span className="text-4xl font-extrabold font-display text-zinc-900 dark:text-white">{eventStats.totalGiftsAllocated} u.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Separator line */}
+            <hr className="border-slate-200/50 dark:border-white/5 my-6" />
+
+            {/* Section 2: Operações Físicas KPIs */}
+            <div className="mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-4 flex items-center gap-1.5 font-display">
+                <Truck className="h-4 w-4 text-indigo-500" />
+                Operações Físicas, Logística & Suprimentos
+              </h3>
             </div>
 
             {/* Metrics Grid */}
@@ -606,6 +794,166 @@ export function AdminDashboard({
 
             </div>
 
+            {/* Seção de Análise de Eventos & Cronograma */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+              
+              {/* Coluna 1: Estatísticas de Temáticas & Localização */}
+              <div className={`p-6 rounded-3xl border transition-all duration-300 ${
+                darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-6 flex items-center gap-2 font-display">
+                  <TrendingUp className="h-4 w-4 text-indigo-500" />
+                  Estatísticas de Temáticas & Localização
+                </h3>
+
+                {/* Sub-seção: Categorias Populares */}
+                <div className="space-y-4 mb-6">
+                  <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest font-display">
+                    Principais Tópicos / Categorias
+                  </h4>
+                  {categoryCounts.length === 0 ? (
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">Nenhuma categoria registrada.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {categoryCounts.map((cat, idx) => {
+                        const total = eventStats.totalEvents || 1;
+                        const pct = Math.round((cat.count / total) * 100);
+                        return (
+                          <div key={idx} className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-medium">
+                              <span className="text-zinc-700 dark:text-zinc-300 font-semibold">{cat.label}</span>
+                              <span className="text-zinc-500 dark:text-zinc-400">{cat.count} {cat.count === 1 ? 'evento' : 'eventos'} ({pct}%)</span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
+                              <div 
+                                className="h-full rounded-full bg-indigo-600 dark:bg-indigo-50 transition-all duration-1000"
+                                style={{ width: `${animateCharts ? pct : 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <hr className="border-slate-200/50 dark:border-white/5 my-4" />
+
+                {/* Sub-seção: Abrangência por UF */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest font-display">
+                    Estados com Mais Eventos (UF)
+                  </h4>
+                  {ufCounts.length === 0 ? (
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">Nenhum estado registrado.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      {ufCounts.map((ufObj, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-xs font-semibold transition-all ${
+                            darkMode 
+                              ? 'bg-zinc-900 border-white/5 hover:border-indigo-500/30 text-zinc-200' 
+                              : 'bg-slate-50 border-slate-200 hover:border-indigo-500/30 text-slate-700'
+                          }`}
+                        >
+                          <MapPin className="h-3 w-3 text-indigo-500" />
+                          <span>{ufObj.uf}</span>
+                          <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 dark:bg-zinc-750" />
+                          <span className="text-indigo-600 dark:text-indigo-400 font-bold">{ufObj.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna 2: Próximos Eventos do Calendário */}
+              <div className={`p-6 rounded-3xl border transition-all duration-300 ${
+                darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2 font-display">
+                    <Calendar className="h-4 w-4 text-indigo-500" />
+                    Cronograma de Próximos Eventos
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 font-bold font-display">
+                    Próximos 5
+                  </span>
+                </div>
+
+                {upcomingEvents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Calendar className="h-8 w-8 text-zinc-400 dark:text-zinc-650 mb-3 animate-pulse" />
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Nenhum evento futuro agendado.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {upcomingEvents.map((evt, idx) => {
+                      const dateObj = getEventDate(evt);
+                      const month = dateObj.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
+                      const day = dateObj.getDate();
+                      
+                      const statusColors: Record<string, string> = {
+                        'concluido': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+                        'concluído': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+                        'confirmado': 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+                        'planejado': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+                        'em negociação': 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+                      };
+                      const statusCls = statusColors[evt.status?.toLowerCase()] || 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => onViewEvent && onViewEvent(evt)}
+                          className={`p-3.5 rounded-2xl border flex items-start gap-4 transition-all duration-200 cursor-pointer ${
+                            darkMode 
+                              ? 'bg-zinc-950/40 border-white/5 hover:border-white/10 hover:bg-zinc-900/40' 
+                              : 'bg-slate-50/50 border-slate-200/60 hover:border-slate-300 hover:bg-slate-100/50'
+                          }`}
+                        >
+                          {/* Calendar Box badge */}
+                          <div className="flex flex-col items-center justify-center w-11 h-11 rounded-xl bg-indigo-500/10 text-indigo-500 font-display shrink-0">
+                            <span className="text-[9px] font-black tracking-wider leading-none">{month}</span>
+                            <span className="text-base font-extrabold leading-none mt-1">{day}</span>
+                          </div>
+
+                          {/* Details */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate leading-snug">
+                                {evt.title || evt.evento || 'Evento sem título'}
+                              </h4>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold border uppercase shrink-0 ${statusCls}`}>
+                                {evt.status}
+                              </span>
+                            </div>
+                            
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 truncate flex items-center gap-2">
+                              {evt.category && (
+                                <span className="font-semibold text-zinc-500 dark:text-zinc-400">
+                                  {evt.category}
+                                </span>
+                              )}
+                              {evt.location && (
+                                <span className="inline-flex items-center gap-0.5 text-zinc-400">
+                                  <MapPin className="h-2.5 w-2.5" />
+                                  {evt.location}
+                                </span>
+                              )}
+                              {evt.uf && ` (${evt.uf})`}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
             {/* Quick Action Info Box */}
             <div className={`mt-8 p-6 rounded-3xl border flex items-start gap-4 ${
               darkMode ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-indigo-50 border-indigo-100'
@@ -655,6 +1003,7 @@ export function AdminDashboard({
               inventoryItems={inventoryItems} 
               events={events}
               baixasVendedores={baixasVendedores}
+              solicitacoesList={solicitacoesList}
               showToast={showToast} 
             />
           </div>

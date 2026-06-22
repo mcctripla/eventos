@@ -109,11 +109,12 @@ interface InventarioTabProps {
   inventoryItems: any[]; 
   events?: any[];
   baixasVendedores?: any[];
+  solicitacoesList?: any[];
   showToast: (m: string) => void; 
 }
 
-export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVendedores = [], showToast }: InventarioTabProps) {
-  const [activeSubTab, setActiveSubTab] = React.useState<'estoque' | 'vendedores' | 'eventos'>('estoque');
+export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVendedores = [], solicitacoesList = [], showToast }: InventarioTabProps) {
+  const [activeSubTab, setActiveSubTab] = React.useState<'estoque' | 'solicitacoes' | 'vendedores' | 'eventos'>('estoque');
   const [search, setSearch] = React.useState('');
   const [filterCol, setFilterCol] = React.useState('todos');
   const [isOpen, setIsOpen] = React.useState(false);
@@ -131,6 +132,9 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
   // States for search and filter in other tabs
   const [vendedorSearch, setVendedorSearch] = React.useState('');
   const [eventSearch, setEventSearch] = React.useState('');
+  const [solicitacoesSearch, setSolicitacoesSearch] = React.useState('');
+  const [solicitacoesFilterStatus, setSolicitacoesFilterStatus] = React.useState<'todos' | 'pendente' | 'aprovado' | 'rejeitado'>('todos');
+  const [isProcessingSolicitacaoId, setIsProcessingSolicitacaoId] = React.useState('');
 
   const [errors, setErrors] = React.useState<Record<string, boolean>>({});
   const [shake, setShake] = React.useState(false);
@@ -322,6 +326,85 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
     }
   };
 
+  const handleApproveSolicitacao = async (sol: any) => {
+    if (isProcessingSolicitacaoId) return;
+    setIsProcessingSolicitacaoId(sol.id);
+    
+    try {
+      // 1. Validações de saldo para cada item
+      const itemsToUpdate = [];
+      for (const reqItem of sol.itens) {
+        const liveItem = inventoryItems.find(i => i.id === reqItem.itemId);
+        if (!liveItem) {
+          showToast(`Erro: O brinde "${reqItem.itemName}" não foi localizado no estoque.`);
+          setIsProcessingSolicitacaoId('');
+          return;
+        }
+        const currentQty = Number(liveItem.quantidade) || 0;
+        if (currentQty < reqItem.quantidade) {
+          showToast(`Saldo insuficiente para "${reqItem.itemName}". Disponível: ${currentQty}, Solicitado: ${reqItem.quantidade}.`);
+          setIsProcessingSolicitacaoId('');
+          return;
+        }
+        itemsToUpdate.push({
+          liveItem,
+          newQty: currentQty - reqItem.quantidade,
+          reqItem
+        });
+      }
+
+      // 2. Realizar baixas de estoque e gerar registros históricos
+      for (const update of itemsToUpdate) {
+        const { liveItem, newQty, reqItem } = update;
+        
+        // Atualizar estoque
+        const colName = liveItem._collection || 'brindes';
+        await updateDoc(doc(db, colName, liveItem.id), { quantidade: newQty });
+        
+        // Criar registro na coleção baixas_vendedores
+        const payload = {
+          itemId: liveItem.id,
+          itemName: liveItem.nome,
+          itemCollection: colName,
+          vendedor: sol.vendedor,
+          cliente: sol.cliente,
+          quantidade: reqItem.quantidade,
+          data: new Date().toISOString().split('T')[0],
+          motivo: `Solicitação Comercial Aprovada: ${sol.motivo}`,
+          custo_unitario: Number(liveItem.custo_unitario) || 0,
+          custo_total: (Number(liveItem.custo_unitario) || 0) * reqItem.quantidade,
+          timestamp: Timestamp.now()
+        };
+        await addDoc(collection(db, 'baixas_vendedores'), payload);
+      }
+
+      // 3. Atualizar status da solicitação
+      await updateDoc(doc(db, 'solicitacoes_brindes', sol.id), { status: 'aprovado' });
+      showToast('Solicitação comercial aprovada e estoque baixado!');
+    } catch (err: any) {
+      console.error("Error approving request:", err);
+      showToast('Erro ao aprovar solicitação.');
+    } finally {
+      setIsProcessingSolicitacaoId('');
+    }
+  };
+
+  const handleRejectSolicitacao = async (sol: any) => {
+    if (!confirm(`Deseja realmente rejeitar a solicitação do vendedor ${sol.vendedor} para o cliente ${sol.cliente}?`)) return;
+    if (isProcessingSolicitacaoId) return;
+    setIsProcessingSolicitacaoId(sol.id);
+
+    try {
+      await updateDoc(doc(db, 'solicitacoes_brindes', sol.id), { status: 'rejeitado' });
+      showToast('Solicitação rejeitada com sucesso.');
+    } catch (err: any) {
+      console.error("Error rejecting request:", err);
+      showToast('Erro ao rejeitar solicitação.');
+    } finally {
+      setIsProcessingSolicitacaoId('');
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     if (dateStr.includes('-')) {
@@ -370,6 +453,21 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
           }`}
         >
           Estoque Atual
+        </button>
+        <button
+          onClick={() => setActiveSubTab('solicitacoes')}
+          className={`pb-4 px-6 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-[2px] flex items-center gap-1.5 ${
+            activeSubTab === 'solicitacoes'
+              ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-550 dark:hover:text-zinc-300'
+          }`}
+        >
+          <span>Solicitações Comercial</span>
+          {(solicitacoesList || []).filter(s => s.status === 'pendente').length > 0 && (
+            <span className="h-4 min-w-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+              {(solicitacoesList || []).filter(s => s.status === 'pendente').length}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveSubTab('vendedores')}
@@ -733,6 +831,189 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
                       );
                     })
                   )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB CONTENT 4: SOLICITAÇÕES COMERCIAL */}
+      {activeSubTab === 'solicitacoes' && (
+        <div className="space-y-4 animate-fade-in-up">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h3 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-white' : 'text-zinc-900'}`}>
+              Solicitações do Time Comercial
+            </h3>
+            
+            {/* Search and Filters */}
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <input 
+                  value={solicitacoesSearch} 
+                  onChange={e => setSolicitacoesSearch(e.target.value)} 
+                  placeholder="Buscar por vendedor ou cliente..." 
+                  className={`${inputCls(darkMode)} pl-9`} 
+                />
+              </div>
+              <select 
+                value={solicitacoesFilterStatus} 
+                onChange={e => setSolicitacoesFilterStatus(e.target.value as any)} 
+                className={`${inputCls(darkMode)} w-full sm:w-40`}
+              >
+                <option value="todos">Todos os status</option>
+                <option value="pendente">Pendentes</option>
+                <option value="aprovado">Aprovados</option>
+                <option value="rejeitado">Rejeitados</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table list */}
+          <div className={`border rounded-3xl overflow-hidden transition-all duration-300 ${
+            darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200/80 shadow-sm'
+          }`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className={`border-b text-[10px] font-bold uppercase tracking-wider ${
+                    darkMode ? 'border-white/5 bg-zinc-900/60 text-zinc-400' : 'bg-slate-50/70 border-slate-200 text-zinc-500'
+                  }`}>
+                    <th className="p-4">Solicitante (Vendedor)</th>
+                    <th className="p-4">Cliente / Destino</th>
+                    <th className="p-4">Itens Solicitados</th>
+                    <th className="p-4">Necessidade / Justificativa</th>
+                    <th className="p-4 text-center">Status</th>
+                    <th className="p-4 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const filtered = (solicitacoesList || []).filter(sol => {
+                      const matchSearch = (sol.vendedor || '').toLowerCase().includes(solicitacoesSearch.toLowerCase()) ||
+                                          (sol.cliente || '').toLowerCase().includes(solicitacoesSearch.toLowerCase());
+                      const matchStatus = solicitacoesFilterStatus === 'todos' || sol.status === solicitacoesFilterStatus;
+                      return matchSearch && matchStatus;
+                    }).sort((a, b) => {
+                      const timeA = a.timestamp?.seconds || 0;
+                      const timeB = b.timestamp?.seconds || 0;
+                      return timeB - timeA;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-zinc-400 dark:text-zinc-555 italic">
+                            Nenhuma solicitação comercial encontrada para os filtros selecionados.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((sol) => {
+                      const isPending = sol.status === 'pendente';
+                      const isApproved = sol.status === 'aprovado';
+                      const isRejected = sol.status === 'rejeitado';
+                      const dateFormatted = formatDate(sol.data_entrega);
+
+                      return (
+                        <tr 
+                          key={sol.id} 
+                          className={`border-b transition-colors ${
+                            darkMode ? 'border-white/5 hover:bg-white/[0.01]' : 'border-slate-100 hover:bg-slate-50/30'
+                          }`}
+                        >
+                          <td className="p-4 font-semibold">{sol.vendedor}</td>
+                          <td className="p-4">
+                            <div className="font-medium text-zinc-900 dark:text-white">{sol.cliente}</div>
+                            {sol.endereco && (
+                              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 flex items-center gap-1">
+                                <MapPin className="h-3 w-3 shrink-0" />
+                                <span className="truncate max-w-[200px]" title={sol.endereco}>{sol.endereco}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="space-y-1">
+                              {(sol.itens || []).map((it: any, idx: number) => {
+                                const stockItem = inventoryItems.find(i => i.id === it.itemId);
+                                const currentStock = stockItem ? (Number(stockItem.quantidade) || 0) : 0;
+                                const isShort = currentStock < it.quantidade;
+                                return (
+                                  <div key={idx} className="flex items-center gap-1.5 text-[11px]">
+                                    <span className="font-extrabold text-indigo-500 shrink-0">{it.quantidade}x</span>
+                                    <span className="font-medium truncate max-w-[150px]">{it.itemName}</span>
+                                    {isPending && (
+                                      <span className={`text-[9px] px-1 rounded-md font-bold ${
+                                        isShort 
+                                          ? 'bg-rose-500/10 text-rose-500 border border-rose-500/10' 
+                                          : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/10'
+                                      }`}>
+                                        {isShort ? `Falta estoque (Disp: ${currentStock})` : `Disponível (Estoque: ${currentStock})`}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="text-[10px] text-zinc-500 dark:text-zinc-400 max-w-[220px] line-clamp-2 leading-relaxed" title={sol.motivo}>
+                              {sol.motivo}
+                            </div>
+                            <div className="text-[9px] font-bold text-indigo-500 mt-1.5 flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              <span>Entrega desejada: {dateFormatted}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${
+                              isApproved 
+                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                                : isRejected
+                                  ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' 
+                                  : 'bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse'
+                            }`}>
+                              {sol.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            {isPending ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => handleApproveSolicitacao(sol)}
+                                  disabled={isProcessingSolicitacaoId !== ''}
+                                  className="p-2 rounded-xl text-emerald-500 hover:bg-emerald-500/15 border border-emerald-500/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
+                                  title="Aprovar e Baixar Estoque"
+                                >
+                                  {isProcessingSolicitacaoId === sol.id ? (
+                                    <div className="h-3 w-3 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="h-4 w-4" />
+                                  )}
+                                  <span>Aprovar</span>
+                                </button>
+                                <button
+                                  onClick={() => handleRejectSolicitacao(sol)}
+                                  disabled={isProcessingSolicitacaoId !== ''}
+                                  className="p-2 rounded-xl text-rose-500 hover:bg-rose-500/15 border border-rose-500/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
+                                  title="Rejeitar Solicitação"
+                                >
+                                  <X className="h-4 w-4" />
+                                  <span>Rejeitar</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-zinc-400 dark:text-zinc-555 italic font-semibold">
+                                {isApproved ? 'Finalizado' : 'Cancelado'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1971,26 +2252,26 @@ export function TutorialTab({ darkMode }: TutorialTabProps) {
         {
           id: 'ev-1',
           title: 'Abrir o Formulário de Criação',
-          desc: 'Clique em "Adicionar Pauta" no calendário geral ou em "Registrar Pauta / Evento" no topo do Painel Admin para abrir o formulário.',
-          tip: 'Campos marcados com asterisco (*) como "Nome do Evento", "Categoria" e "Data Inicial" são de preenchimento obrigatório.'
+          desc: 'Clique em "Adicionar Pauta" no calendário geral ou em "Registrar Pauta / Evento" no topo do Painel Admin. O modal será aberto exibindo quatro abas principais ("Dados Básicos", "Logística & Listas", "Financeiro", "Arquivos & Histórico").',
+          tip: 'Campos marcados com asterisco (*) como "Nome do Evento", "Categoria" e "Data Inicial" são de preenchimento obrigatório. A aba "Dados Básicos" é sempre selecionada por padrão para garantir consistência no fluxo de preenchimento.'
         },
         {
           id: 'ev-2',
-          title: 'Sourcing Automático com Inteligência Artificial',
-          desc: 'Para acelerar o preenchimento, digite o nome do evento e clique em "Buscar no Google" ao lado do campo do título. A ferramenta buscará automaticamente informações como Público-Alvo, Descrição, Localização e Imagens relacionadas.',
-          tip: 'Verifique as informações buscadas antes de salvar para garantir que estão alinhadas com as diretrizes do evento.'
+          title: 'Sourcing Automático com Inteligência Artificial (Google Search)',
+          desc: 'Para acelerar a criação do evento, digite o nome completo do evento no campo "Nome do Evento" e clique no botão "Buscar no Google" localizado à direita do campo. A ferramenta utilizará a API do Google Search para buscar e preencher automaticamente os campos de Público-Alvo, Descrição Detalhada, Localização/UF e sugerir uma imagem de capa relacionada.',
+          tip: 'Sempre faça uma revisão fina nas informações importadas automaticamente antes de salvar, ajustando a descrição, data ou imagem caso necessário.'
         },
         {
           id: 'ev-3',
-          title: 'Alocação de Brindes e Logística',
-          desc: 'Navegue até a aba "Logística & Listas" dentro do modal de eventos. Selecione a quantidade e os itens de estoque (brindes, uniformes) que serão destinados a esse evento.',
-          warning: 'Esta ação criará uma reserva automática no estoque, e os itens constarão como "Reservados" até a conclusão do evento.'
+          title: 'Alocação de Brindes e Logística de Itens',
+          desc: 'Acesse a aba "Logística & Listas" dentro do modal de edição/criação. No campo de brindes, selecione o item desejado e insira a quantidade que será alocada para o evento. O sistema criará instantaneamente uma reserva de saldo físico no inventário.',
+          warning: 'Esta ação altera a situação do item alocado para "Reservado" na aba de eventos. O saldo físico fica comprometido e não poderá ser distribuído para saídas de vendedores, evitando duplicidades de entrega.'
         },
         {
           id: 'ev-4',
-          title: 'Salvar e Acompanhar Status',
-          desc: 'Escolha o status do evento (planejado, confirmado, concluído) e clique em "Confirmar". O evento aparecerá imediatamente no calendário corporativo.',
-          tip: 'Quando o evento mudar de status para "Concluído", a reserva no estoque é automaticamente confirmada como baixada ("Entregue").'
+          title: 'Definição de Status e Baixa Automática',
+          desc: 'Escolha o status do evento no formulário: "Planejado", "Confirmado" ou "Concluído". Ao salvar, a pauta é registrada no calendário corporativo geral.',
+          tip: 'Caso o status do evento seja marcado ou alterado para "Concluído", o sistema converterá a situação dos brindes alocados de "Reservado" para "Entregue", oficializando a baixa definitiva de saldo no inventário principal.'
         }
       ]
     },
@@ -2007,25 +2288,25 @@ export function TutorialTab({ darkMode }: TutorialTabProps) {
           id: 'fin-1',
           title: 'Definir o Orçamento (Budget) do Evento',
           desc: 'Ao criar ou editar um evento, acesse a aba "Financeiro". Defina o campo "Orçamento Total" para estabelecer o limite financeiro do projeto.',
-          tip: 'Essa aba está disponível apenas para administradores (Role Admin) e não é exibida para outros usuários.'
+          tip: 'Esta aba e todos os seus campos são de acesso exclusivo para administradores (Role Admin). Usuários comuns ("Approved") não visualizam nem interagem com dados financeiros no modal de detalhes ou de edição.'
         },
         {
           id: 'fin-2',
-          title: 'Inserir Lançamentos Manuais',
-          desc: 'Adicione despesas manuais especificando a Conta, Data de Lançamento, Data de Vencimento, Fornecedor, Descrição e o Valor em R$.',
-          tip: 'O "Custo Real" do evento é calculado dinamicamente pela somatória de todos os lançamentos de despesas.'
+          title: 'Inserir Lançamentos Manuais de Gastos',
+          desc: 'Você pode registrar despesas clicando em adicionar novos lançamentos na aba "Financeiro". Cada despesa exige: a Descrição da Conta (Categoria), Data do Lançamento, Data de Vencimento, Nome do Fornecedor/Parceiro, Observações gerais e o Valor (R$) da transação.',
+          tip: 'O "Custo Real Consolidado" do evento é calculado automaticamente em tempo real pela somatória de todos os lançamentos ativos salvos.'
         },
         {
           id: 'fin-3',
-          title: 'Importar Planilha Excel',
-          desc: 'Clique em "Importar Excel" na aba "Financeiro" e faça o upload de uma planilha de gastos. O sistema lerá as colunas de gastos e as importará automaticamente.',
-          warning: 'Se o Excel possuir múltiplas abas, o sistema abrirá um seletor para você escolher qual aba corresponde a este evento antes de confirmar.'
+          title: 'Importar Despesas via Planilha Excel',
+          desc: 'Para despesas em lote, clique no botão "Importar Excel" na aba "Financeiro". O sistema tentará mapear os cabeçalhos da primeira linha da planilha.',
+          warning: 'Para uma importação bem-sucedida, garanta que sua planilha contém colunas com nomes equivalentes a: \n• Conta/Categoria (busca por: "desc conta", "categoria", "conta") \n• Lançamento (busca por: "lançamento", "lancamento", "data de lançamento") \n• Vencimento (busca por: "vencimento", "data de vencimento") \n• Fornecedor (busca por: "fornecedor", "contrapartida", "parceiro") \n• Descrição (busca por: "observações", "descrição", "observação") \n• Valor (busca por: "débito", "debito", "valor", "mc")\n\nSe o arquivo Excel possuir mais de uma aba de planilha, o sistema exibirá uma caixa de diálogo para você selecionar qual aba de gastos deve ser importada.'
         },
         {
           id: 'fin-4',
           title: 'Análise de Orçamento vs Custo Real',
-          desc: 'Visualize o custo real consolidado na tela de detalhes do evento ou no dashboard financeiro principal.',
-          warning: 'Se o Custo Real ultrapassar o Orçamento Aprovado, o valor final ficará destacado em vermelho como aviso visual de estouro de budget.'
+          desc: 'Visualize o comparativo financeiro na seção "Dados Financeiros & Comerciais" no modal de detalhes do evento ou no dashboard principal do painel.',
+          warning: 'Caso o Custo Real Consolidado ultrapasse o Orçamento Aprovado, o campo de valor do custo real ficará em destaque vermelho como alerta visual de estouro de budget.'
         }
       ]
     },
@@ -2040,27 +2321,27 @@ export function TutorialTab({ darkMode }: TutorialTabProps) {
       steps: [
         {
           id: 'est-1',
-          title: 'Cadastrar e Monitorar Itens',
-          desc: 'Acesse a aba "Estoque Atual" no painel. Adicione novos brindes ou uniformes especificando Nome, Categoria (brindes, uniformes, etc.), Quantidade e Custo Unitário.',
-          tip: 'O sistema exibe o valor financeiro do inventário (Saldo × Custo) e destaca com alerta amarelo itens com baixo estoque (<= 5 unidades).'
+          title: 'Cadastrar e Monitorar Itens de Estoque',
+          desc: 'Acesse a aba "Estoque Atual" no painel. Adicione novos brindes ou uniformes especificando Nome do Item, Categoria (ex: brindes, uniformes, estoque, etc.), Quantidade Inicial e Custo Unitário (R$).',
+          tip: 'O sistema exibe o valor financeiro do inventário (Saldo × Custo) e destaca com alerta amarelo itens com baixo estoque (saldo menor ou igual a 5 unidades) para sinalizar a necessidade de reposição.'
         },
         {
           id: 'est-2',
-          title: 'Lançar Saídas para Vendedores (Baixas)',
-          desc: 'Na aba "Saídas para Vendedores", use o formulário para registrar a retirada de brindes por consultores comerciais para reuniões corporativas.',
-          warning: 'O sistema valida a retirada em tempo real e não permitirá dar baixa de uma quantidade maior que o saldo disponível em estoque.'
+          title: 'Lançar Saídas para Vendedores (Baixas Comerciais)',
+          desc: 'Na aba "Saídas para Vendedores", use o formulário para registrar a retirada de brindes por consultores comerciais para reuniões corporativas. É necessário informar o Item do estoque, Nome do Vendedor, Cliente/Empresa de destino, Quantidade retirada, Data e Motivo/Justificativa.',
+          warning: 'O sistema valida a retirada em tempo real no banco de dados e impede a conclusão do formulário caso a quantidade solicitada seja maior que o saldo físico disponível no inventário.'
         },
         {
           id: 'est-3',
-          title: 'Histórico de Retiradas e Estorno (Reversão)',
-          desc: 'Acompanhe todas as saídas na tabela de histórico de vendedores. Se a reunião for cancelada ou houver erro no lançamento, clique em "Estornar" (ícone de lixeira no histórico).',
-          tip: 'O estorno remove a baixa comercial do banco e devolve imediatamente as quantidades correspondentes de volta ao estoque do item.'
+          title: 'Histórico de Retiradas e Estorno (Reversão de Saldo)',
+          desc: 'Acompanhe todas as saídas na tabela de histórico de vendedores. Se a reunião for cancelada, se houver devolução de brindes não utilizados, ou erro no lançamento, você pode desfazer o registro clicando no botão "Estornar" (ícone de lixeira vermelha na tabela de histórico).',
+          tip: 'O estorno remove o registro de saída da coleção "baixas_vendedores" e devolve imediatamente as quantidades correspondentes de volta ao estoque do item.'
         },
         {
           id: 'est-4',
-          title: 'Rastrear Itens Vinculados a Eventos',
-          desc: 'Na aba "Itens em Eventos", veja uma tabela consolidada de todos os brindes alocados em eventos gerais com data e badge de situação.',
-          tip: 'Badge "Reservado" indica que o item está separado para um evento futuro. Badge "Entregue" indica que o evento foi concluído e o saldo foi baixado.'
+          title: 'Rastrear Itens Vinculados a Eventos (Reservas)',
+          desc: 'Na aba "Itens em Eventos", veja uma tabela consolidada de todos os brindes e uniformes alocados em eventos gerais com data e badge de situação.',
+          tip: 'Badge "Reservado" indica que o item está separado para um evento futuro (status Planejado ou Confirmado). Badge "Entregue" indica que o evento foi concluído e o saldo foi baixado definitivamente do estoque.'
         }
       ]
     },
@@ -2075,21 +2356,21 @@ export function TutorialTab({ darkMode }: TutorialTabProps) {
       steps: [
         {
           id: 'usr-1',
-          title: 'Fluxo de Entrada de Usuários',
-          desc: 'Ao se cadastrar, todo novo colaborador entra com a função padrão "pending" (Pendente), ficando bloqueado de ver o calendário geral de pautas.',
-          tip: 'Isto evita que pessoas não autorizadas acessem os cronogramas de marketing da empresa.'
+          title: 'Fluxo de Entrada de Usuários (Pending)',
+          desc: 'Ao se cadastrar, todo novo colaborador entra com a função padrão "pending" (Pendente), ficando bloqueado de visualizar o calendário geral de pautas por uma tela de solicitação de aprovação.',
+          tip: 'Isso garante a segurança da informação do calendário estratégico de marketing da empresa, impedindo que contas não validadas acessem os cronogramas.'
         },
         {
           id: 'usr-2',
-          title: 'Aprovação e Níveis de Acesso',
-          desc: 'Na aba "Usuários", localize o usuário pendente na tabela e altere seu perfil (Role): "Approved" (Aprovado - acesso geral de leitura e edição comum) ou "Admin" (Administrador - acesso total, financeiro e painel administrativo).',
-          warning: 'Qualquer alteração de role é gravada no Firestore e reflete imediatamente no navegador do colaborador.'
+          title: 'Aprovação e Níveis de Acesso (Roles)',
+          desc: 'Na aba "Usuários", localize o usuário pendente na tabela e altere seu perfil (Role) utilizando a caixa de seleção:',
+          warning: 'Níveis de Permissão:\n• Approved (Aprovado): Acesso geral de leitura/edição ao calendário de eventos gerais e listas de logística, mas não visualiza abas financeiras nem acessa o Painel Admin.\n• Admin (Administrador): Acesso total e irrestrito ao sistema, incluindo fluxo de caixa, usuários, orçamentos e inventários.'
         },
         {
           id: 'usr-3',
-          title: 'Exclusão de Contas',
-          desc: 'Se um colaborador for desligado da empresa ou cadastrado por engano, você pode clicar no botão "Excluir" (ícone de lixeira) ao lado do perfil dele na tabela de usuários.',
-          warning: 'Esta ação exclui permanentemente o registro de acesso do usuário no banco de dados. Confirme com cuidado.'
+          title: 'Exclusão Definitiva de Contas',
+          desc: 'Se um colaborador for desligado da empresa ou cadastrado incorretamente, você pode clicar no botão "Excluir" (lixeira vermelha) ao lado do perfil dele na tabela de usuários.',
+          warning: 'Esta ação exclui permanentemente o registro de acesso do usuário no banco de dados. O usuário perderá o acesso instantaneamente.'
         }
       ]
     }
