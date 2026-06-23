@@ -641,7 +641,7 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelCls}>Quantidade *</label>
                     <input
@@ -704,7 +704,8 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
             </div>
 
             <div className={`border rounded-2xl overflow-hidden ${darkMode ? 'bg-zinc-900/10 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="overflow-x-auto font-sans">
+              {/* Desktop View */}
+              <div className="hidden md:block overflow-x-auto font-sans">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className={`border-b font-bold ${darkMode ? 'bg-zinc-950/40 border-white/5 text-zinc-400' : 'bg-slate-50/50 border-slate-200 text-zinc-500'}`}>
@@ -748,6 +749,51 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile View */}
+              <div className="block md:hidden divide-y divide-slate-100 dark:divide-white/5 text-xs">
+                {filteredBaixas.length === 0 ? (
+                  <div className="p-8 text-center font-medium text-zinc-400">
+                    Nenhum registro de saída encontrado.
+                  </div>
+                ) : (
+                  filteredBaixas.map(b => (
+                    <div key={b.id} className="p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-indigo-505 dark:text-indigo-400">{b.vendedor}</span>
+                        <span className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">{formatDate(b.data)}</span>
+                      </div>
+                      
+                      <div className="text-zinc-800 dark:text-zinc-200 font-bold text-xs">
+                        {b.itemName} <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal">({b.quantidade} u.)</span>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 pt-2 border-t border-dashed border-slate-100 dark:border-white/5 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-400 font-medium">Cliente/Destino:</span>
+                          <span className="text-zinc-700 dark:text-zinc-300 font-semibold">{b.cliente}</span>
+                        </div>
+                        {b.motivo && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-zinc-400 font-medium shrink-0">Motivo:</span>
+                            <span className="text-zinc-600 dark:text-zinc-400 font-normal italic text-right truncate max-w-[200px]" title={b.motivo}>{b.motivo}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center pt-2">
+                          <span className="text-zinc-400 font-medium">Estornar:</span>
+                          <button
+                            onClick={() => handleDeleteBaixa(b)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-colors"
+                            title="Estornar baixa"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -771,7 +817,8 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
           </div>
 
           <div className={`border rounded-2xl overflow-hidden ${darkMode ? 'bg-zinc-900/10 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-            <div className="overflow-x-auto">
+            {/* Desktop View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className={`border-b font-bold ${darkMode ? 'bg-zinc-950/40 border-white/5 text-zinc-400' : 'bg-slate-50/50 border-slate-200 text-zinc-500'}`}>
@@ -834,6 +881,68 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile View */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-white/5 text-xs">
+              {eventGifts.length === 0 ? (
+                <div className="p-8 text-center font-medium text-zinc-400">
+                  Nenhum brinde alocado em eventos localizado.
+                </div>
+              ) : (
+                eventGifts.map(g => {
+                  const isDelivered = g.eventStatus === 'Concluído';
+                  return (
+                    <div key={g.id} className="p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-zinc-850 dark:text-zinc-150 text-sm">{g.itemName}</span>
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${collectionColors[g.category] || 'bg-zinc-100 text-zinc-550'}`}>
+                          {collectionLabels[g.category] || g.category}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 pt-2 border-t border-dashed border-slate-100 dark:border-white/5 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-400 font-medium">Qtd Alocada:</span>
+                          <span className="text-zinc-800 dark:text-zinc-200 font-extrabold">{g.quantidade}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-400 font-medium">Evento Vinculado:</span>
+                          <span className="text-indigo-505 font-bold">{g.eventName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-400 font-medium">Data Evento:</span>
+                          <span className="text-zinc-655 dark:text-zinc-350 font-semibold">{formatDate(g.eventDate)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-400 font-medium">Status Evento:</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            g.eventStatus === 'Concluído' ? 'bg-emerald-500/10 text-emerald-500' :
+                            g.eventStatus === 'Confirmado' ? 'bg-indigo-500/10 text-indigo-500' :
+                            'bg-zinc-500/10 text-zinc-400'
+                          }`}>
+                            {g.eventStatus}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-400 font-medium">Situação:</span>
+                          {isDelivered ? (
+                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                              <CheckCircle2 className="h-3 w-3 shrink-0" />
+                              <span>Entregue</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              <span>Reservado</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -874,7 +983,8 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
           <div className={`border rounded-3xl overflow-hidden transition-all duration-300 ${
             darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-slate-200/80 shadow-sm'
           }`}>
-            <div className="overflow-x-auto">
+            {/* Desktop View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className={`border-b text-[10px] font-bold uppercase tracking-wider ${
@@ -1017,6 +1127,137 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile View */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-white/5 text-xs">
+              {(() => {
+                const filtered = (solicitacoesList || []).filter(sol => {
+                  const matchSearch = (sol.vendedor || '').toLowerCase().includes(solicitacoesSearch.toLowerCase()) ||
+                                      (sol.cliente || '').toLowerCase().includes(solicitacoesSearch.toLowerCase());
+                  const matchStatus = solicitacoesFilterStatus === 'todos' || sol.status === solicitacoesFilterStatus;
+                  return matchSearch && matchStatus;
+                }).sort((a, b) => {
+                  const timeA = a.timestamp?.seconds || 0;
+                  const timeB = b.timestamp?.seconds || 0;
+                  return timeB - timeA;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="p-8 text-center text-zinc-400 dark:text-zinc-500 italic">
+                      Nenhuma solicitação comercial encontrada para os filtros selecionados.
+                    </div>
+                  );
+                }
+
+                return filtered.map((sol) => {
+                  const isPending = sol.status === 'pendente';
+                  const isApproved = sol.status === 'aprovado';
+                  const isRejected = sol.status === 'rejeitado';
+                  const dateFormatted = formatDate(sol.data_entrega);
+
+                  return (
+                    <div key={sol.id} className="p-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-zinc-805 dark:text-zinc-150">{sol.vendedor}</span>
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${
+                          isApproved 
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                            : isRejected
+                              ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' 
+                              : 'bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse'
+                        }`}>
+                          {sol.status}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 pt-2 border-t border-dashed border-slate-100 dark:border-white/5 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-400 font-medium">Cliente / Destino:</span>
+                          <span className="text-zinc-850 dark:text-zinc-200 font-semibold">{sol.cliente}</span>
+                        </div>
+                        {sol.endereco && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-zinc-400 font-medium shrink-0">Endereço:</span>
+                            <span className="text-zinc-500 dark:text-zinc-400 text-right truncate max-w-[200px]" title={sol.endereco}>{sol.endereco}</span>
+                          </div>
+                        )}
+                        
+                        <div className="py-1">
+                          <span className="text-zinc-400 font-medium block mb-1">Itens Solicitados:</span>
+                          <div className="space-y-1 bg-slate-50 dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/40 dark:border-white/5">
+                            {(sol.itens || []).map((it: any, idx: number) => {
+                              const stockItem = inventoryItems.find(i => i.id === it.itemId);
+                              const currentStock = stockItem ? (Number(stockItem.quantidade) || 0) : 0;
+                              const isShort = currentStock < it.quantidade;
+                              return (
+                                <div key={idx} className="flex items-center gap-1.5 text-[10px]">
+                                  <span className="font-extrabold text-indigo-505 shrink-0">{it.quantidade}x</span>
+                                  <span className="font-medium truncate max-w-[130px]">{it.itemName}</span>
+                                  {isPending && (
+                                    <span className={`text-[8px] px-1 rounded font-bold shrink-0 ${
+                                      isShort 
+                                        ? 'bg-rose-500/10 text-rose-500 border border-rose-500/10' 
+                                        : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/10'
+                                    }`}>
+                                      {isShort ? `Falta (Disp: ${currentStock})` : `Disponível (${currentStock})`}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {sol.motivo && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-zinc-400 font-medium">Justificativa:</span>
+                            <span className="text-zinc-600 dark:text-zinc-400 italic text-[11px] leading-relaxed bg-slate-100/50 dark:bg-zinc-900/30 p-2 rounded-lg border border-slate-200/20 dark:border-white/5">{sol.motivo}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center text-[10px] font-bold text-indigo-505 pt-1.5">
+                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Entrega desejada:</span>
+                          <span>{dateFormatted}</span>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-3 border-t border-dashed border-slate-100 dark:border-white/5">
+                          <span className="text-zinc-400 font-medium">Ações:</span>
+                          {isPending ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleApproveSolicitacao(sol)}
+                                disabled={isProcessingSolicitacaoId !== ''}
+                                className="px-2.5 py-1.5 rounded-lg text-emerald-500 hover:bg-emerald-500/15 border border-emerald-500/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
+                              >
+                                {isProcessingSolicitacaoId === sol.id ? (
+                                  <div className="h-3 w-3 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                )}
+                                <span>Aprovar</span>
+                              </button>
+                              <button
+                                onClick={() => handleRejectSolicitacao(sol)}
+                                disabled={isProcessingSolicitacaoId !== ''}
+                                className="px-2.5 py-1.5 rounded-lg text-rose-500 hover:bg-rose-500/15 border border-rose-500/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                <span>Rejeitar</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-555 italic font-semibold">
+                              {isApproved ? 'Finalizado' : 'Cancelado'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
@@ -1033,7 +1274,7 @@ export function InventarioTab({ darkMode, inventoryItems, events = [], baixasVen
               <button onClick={closeModal} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className={labelCls}>Nome do Item *</label>
                   <input 
@@ -1256,7 +1497,7 @@ export function FornecedoresTab({ darkMode, fornecedores, showToast }: Fornecedo
               <button onClick={closeModal} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className={labelCls}>Nome do Fornecedor *</label>
                   <input 
@@ -1460,7 +1701,7 @@ export function ParticipantesTab({ darkMode, participantes, showToast }: Partici
               <button onClick={closeModal} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className={labelCls}>Nome Completo *</label>
                   <input 
@@ -1688,7 +1929,7 @@ export function ViagensTab({ darkMode, viagens, showToast }: ViagensTabProps) {
               <button onClick={closeModal} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className={labelCls}>Origem</label><input value={form.origem} onChange={e => setForm({...form, origem: e.target.value})} placeholder="Ex: São Paulo" className={inputCls(darkMode)} /></div>
                 <div>
                   <label className={labelCls}>Destino *</label>
@@ -1822,7 +2063,8 @@ export function EventosTab({ darkMode, events, onEditEvent, onDeleteEvent, onAdd
 
       {/* Events Table List */}
       <div className={`border rounded-3xl overflow-hidden ${darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-        <div className="overflow-x-auto">
+        {/* Desktop View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className={`border-b text-[10px] font-bold uppercase tracking-wider text-zinc-400 ${darkMode ? 'border-white/5 bg-zinc-900/50' : 'border-slate-100 bg-slate-50'}`}>
@@ -1904,6 +2146,84 @@ export function EventosTab({ darkMode, events, onEditEvent, onDeleteEvent, onAdd
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View */}
+        <div className="block md:hidden divide-y divide-slate-100 dark:divide-white/5 text-xs">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center">
+              <EmptyState
+                darkMode={darkMode}
+                icon={Calendar}
+                title={search !== '' || filterCategory !== 'todos' || filterStatus !== 'todos' ? 'Nenhum evento localizado' : 'Sem eventos cadastrados'}
+                description={search !== '' || filterCategory !== 'todos' || filterStatus !== 'todos' ? 'Não encontramos eventos correspondentes aos filtros ativos.' : 'Crie novos eventos no calendário para começar a gerenciar sua pauta.'}
+                actionLabel="Novo Evento"
+                onAction={onAddEvent}
+                isFilterActive={search !== '' || filterCategory !== 'todos' || filterStatus !== 'todos'}
+                onClearFilters={() => { setSearch(''); setFilterCategory('todos'); setFilterStatus('todos'); }}
+              />
+            </div>
+          ) : (
+            filtered.map(event => {
+              const dateStr = event.date?.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' }) || '--';
+              return (
+                <div key={event.id} className="p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-zinc-900 dark:text-zinc-150 text-sm">{event.title}</span>
+                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border ${
+                      darkMode ? 'bg-zinc-800 text-zinc-350 border-white/5' : 'bg-slate-100 text-zinc-700 border-slate-200'
+                    }`}>
+                      {event.category || 'Pauta Geral'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 pt-2 border-t border-dashed border-slate-100 dark:border-white/5 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400 font-medium">Data:</span>
+                      <span className="text-zinc-700 dark:text-zinc-300 font-semibold">{dateStr}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400 font-medium">Responsável:</span>
+                      <span className="text-zinc-750 dark:text-zinc-200 font-semibold">{event.host || 'Sem Responsável'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400 font-medium">Local/Formato:</span>
+                      <span className="text-zinc-750 dark:text-zinc-200 font-semibold">{event.location} ({event.format || 'Híbrido'})</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400 font-medium">Status:</span>
+                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider border ${
+                        statusColors[event.status] || 'bg-zinc-100 text-zinc-550 border-zinc-200'
+                      }`}>
+                        {event.status || 'planejado'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-zinc-400 font-medium">Ações:</span>
+                      <div className="space-x-1.5 flex items-center">
+                        <button 
+                          onClick={() => onEditEvent?.(event)}
+                          className={`p-2 rounded-xl transition-all inline-flex items-center justify-center ${
+                            darkMode ? 'bg-zinc-800 text-zinc-350' : 'bg-slate-100 text-zinc-750'
+                          }`}
+                          title="Editar Evento"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => onDeleteEvent?.(event.id)}
+                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-all inline-flex items-center justify-center"
+                          title="Excluir Evento"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
@@ -2116,9 +2436,9 @@ export function FinanceiroTab({ darkMode, events, onEditEvent, onViewEvent, show
 
       </div>
 
-      {/* Events Financial List */}
       <div className={`border rounded-[32px] overflow-hidden ${darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-        <div className="overflow-x-auto">
+        {/* Desktop View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs font-medium">
             <thead>
               <tr className={`border-b text-[10px] font-bold uppercase tracking-wider text-zinc-400 ${darkMode ? 'border-white/5 bg-zinc-900/50' : 'border-slate-100 bg-slate-50'}`}>
@@ -2225,6 +2545,91 @@ export function FinanceiroTab({ darkMode, events, onEditEvent, onViewEvent, show
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View */}
+        <div className="block md:hidden divide-y divide-slate-100 dark:divide-white/5 text-xs">
+          {filtered.length === 0 ? (
+            <div className="py-12 text-center text-xs text-zinc-400">
+              Nenhum evento financeiro localizado.
+            </div>
+          ) : (
+            filtered.map(event => {
+              const dateStr = event.date instanceof Date 
+                ? event.date.toLocaleDateString('pt-BR') 
+                : '--';
+              return (
+                <div key={event.id} className="p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-zinc-900 dark:text-zinc-150 text-sm">{event.title}</span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                      event.apuracao_finalizada 
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25' 
+                        : 'bg-rose-500/10 text-rose-500 border-rose-500/25'
+                    }`}>
+                      {event.apuracao_finalizada ? 'SIM' : 'NÃO'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 pt-2 border-t border-dashed border-slate-100 dark:border-white/5 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400 font-medium">Data:</span>
+                      <span className="text-zinc-700 dark:text-zinc-300 font-semibold">{dateStr}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400 font-medium">UF:</span>
+                      <span className="text-zinc-700 dark:text-zinc-300 font-bold">{event.uf || '--'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400 font-medium">Tipo Financeiro:</span>
+                      <span className="text-zinc-750 dark:text-zinc-200 font-semibold">{event.tipo_financeiro || '--'}</span>
+                    </div>
+                    
+                    <div className="py-1 bg-slate-50 dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/40 dark:border-white/5 space-y-1 mt-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-zinc-405">Custo Real:</span>
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200">R$ {formatCurrency(parseNumber(event.custo_real))}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-zinc-405">Prev. Pipe:</span>
+                        <span className="font-semibold text-zinc-550 dark:text-zinc-400">R$ {formatCurrency(parseNumber(event.previsao_pipe))}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-zinc-405">Prev. Fech.:</span>
+                        <span className="font-bold text-purple-600 dark:text-purple-400">R$ {formatCurrency(parseNumber(event.previsao_fechamento))}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-slate-200/50 dark:border-white/10">
+                        <span className="text-zinc-400 font-medium">Receita Est.:</span>
+                        <span className="font-extrabold text-emerald-500">R$ {formatCurrency(parseNumber(event.receita_estimada))}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-3 border-t border-dashed border-slate-100 dark:border-white/5">
+                      <span className="text-zinc-400 font-medium">Ações:</span>
+                      <div className="space-x-1.5 flex items-center">
+                        <button
+                          onClick={() => onViewEvent?.(event)}
+                          className="p-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 transition-all inline-flex items-center justify-center cursor-pointer border border-transparent"
+                          title="Visualizar Detalhes"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onEditEvent?.(event)}
+                          className={`p-2 rounded-xl transition-all inline-flex items-center justify-center ${
+                            darkMode ? 'bg-zinc-800 text-zinc-300' : 'bg-slate-100 text-zinc-700'
+                          }`}
+                          title="Editar Evento"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

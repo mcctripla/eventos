@@ -22,7 +22,8 @@ import {
   BookOpen,
   TrendingUp,
   MapPin,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown
 } from 'lucide-react';
 import { InventarioTab, FornecedoresTab, ParticipantesTab, ViagensTab, EventosTab, FinanceiroTab, TutorialTab } from './TabViews';
 
@@ -336,34 +337,66 @@ export function AdminDashboard({
       )}
 
       {/* Admin Sub-Navigation */}
-      <div className={`sticky top-20 z-40 border-b px-6 lg:px-8 py-3 overflow-x-auto custom-scrollbar transition-colors ${
+      <div className={`sticky top-20 z-40 border-b px-4 sm:px-6 lg:px-8 py-3 transition-colors ${
         darkMode ? 'bg-zinc-950/80 border-white/5 backdrop-blur-xl' : 'bg-white/80 border-slate-200/50 backdrop-blur-xl'
       }`}>
-        <div className="flex items-center space-x-2 w-full px-6 lg:px-12">
-          <div className="flex items-center mr-4 pr-4 border-r border-slate-200 dark:border-white/10 space-x-2 text-indigo-600 dark:text-indigo-400">
-            <ShieldCheck className="h-5 w-5" />
-            <span className="text-[11px] font-bold tracking-widest uppercase hidden md:inline">Admin Mode</span>
-          </div>
-
-          {adminTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === tab.id 
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20' 
-                    : darkMode 
-                      ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900' 
-                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-slate-200/50'
+        <div className="w-full flex items-center justify-between px-2 sm:px-6 lg:px-12">
+          
+          {/* Mobile Dropdown View */}
+          <div className="flex md:hidden items-center justify-between w-full gap-3">
+            <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <ShieldCheck className="h-5 w-5" />
+              <span className="text-[10px] font-bold tracking-widest uppercase">Admin</span>
+            </div>
+            <div className="relative flex-1 max-w-xs">
+              <select
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value)}
+                className={`w-full p-2.5 pr-9 rounded-xl border text-xs font-bold transition-all appearance-none outline-none ${
+                  darkMode
+                    ? 'bg-zinc-900 border-white/10 text-white focus:border-indigo-500 shadow-lg'
+                    : 'bg-white border-slate-200 text-zinc-900 focus:border-indigo-500 shadow-sm'
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
+                {adminTabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                <ChevronDown className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Tabs View */}
+          <div className="hidden md:flex items-center space-x-2 w-full">
+            <div className="flex items-center mr-4 pr-4 border-r border-slate-200 dark:border-white/10 space-x-2 text-indigo-600 dark:text-indigo-400">
+              <ShieldCheck className="h-5 w-5" />
+              <span className="text-[11px] font-bold tracking-widest uppercase">Admin Mode</span>
+            </div>
+
+            {adminTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === tab.id 
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20' 
+                      : darkMode 
+                        ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900' 
+                        : 'text-zinc-500 hover:text-zinc-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -1149,7 +1182,8 @@ export function AdminDashboard({
 
               {/* Users list table */}
               <div className={`border rounded-[32px] overflow-hidden ${darkMode ? 'bg-zinc-900/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <div className="overflow-x-auto">
+                {/* Desktop View */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full border-collapse text-left text-xs font-medium">
                     <thead>
                       <tr className={`border-b text-[10px] font-bold uppercase tracking-wider text-zinc-400 ${darkMode ? 'border-white/5 bg-zinc-900/50' : 'border-slate-100 bg-slate-50'}`}>
@@ -1249,6 +1283,91 @@ export function AdminDashboard({
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile View */}
+                <div className="block md:hidden divide-y divide-slate-100 dark:divide-white/5">
+                  {filteredUsers.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-zinc-400">
+                      Nenhum registro de usuário localizado.
+                    </div>
+                  ) : (
+                    filteredUsers.map((usr) => {
+                      const name = usr.nome || 'Sem Nome';
+                      const initials = name
+                        .split(' ')
+                        .map((n: string) => n[0])
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase() || 'U';
+
+                      return (
+                        <div key={usr.id} className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="h-10 w-10 rounded-full bg-indigo-500/10 text-indigo-605 dark:text-indigo-400 flex items-center justify-center text-xs font-bold shrink-0 shadow-inner">
+                                {initials}
+                              </div>
+                              <div className="overflow-hidden">
+                                <div className="font-bold text-xs text-zinc-800 dark:text-zinc-150 truncate max-w-[150px]">{name}</div>
+                                <div className="text-[9px] text-zinc-400 font-mono mt-0.5">ID: {usr.id.slice(0, 8)}...</div>
+                              </div>
+                            </div>
+                            
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                              usr.role === 'admin' 
+                                ? 'bg-rose-500/10 text-rose-500 border-rose-500/25' 
+                                : usr.role === 'approved' 
+                                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25' 
+                                  : 'bg-amber-500/10 text-amber-505 border-amber-500/25'
+                            }`}>
+                              {usr.role === 'admin' ? 'Admin' : usr.role === 'approved' ? 'Aprovado' : 'Pendente'}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-2 pt-2 border-t border-dashed border-slate-100 dark:border-white/5 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-zinc-400 font-medium">E-mail:</span>
+                              <span className="text-zinc-700 dark:text-zinc-300 font-semibold truncate max-w-[200px]" title={usr.email}>{usr.email || 'Sem Email'}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-zinc-400 font-medium">Função:</span>
+                              <select 
+                                value={usr.role || 'pending'} 
+                                onChange={(e) => handleUpdateRole(usr.id, e.target.value)}
+                                className={`text-[10px] font-semibold rounded-lg px-2 py-1 border outline-none cursor-pointer transition-all bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 ${
+                                  darkMode ? 'border-white/5 focus:border-indigo-500' : 'border-slate-200 focus:border-indigo-500 shadow-sm'
+                                }`}
+                              >
+                                <option value="admin">Admin</option>
+                                <option value="approved">Approved</option>
+                                <option value="pending">Pending</option>
+                              </select>
+                            </div>
+                            <div className="flex justify-between items-center pt-2">
+                              <span className="text-zinc-405 font-medium">Ações:</span>
+                              <div className="space-x-1.5 flex items-center">
+                                <button
+                                  onClick={() => handleOpenEditUser(usr)}
+                                  className="p-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 transition-all inline-flex items-center justify-center cursor-pointer border border-transparent"
+                                  title="Editar Usuário"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(usr.id, usr.email)}
+                                  className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-all inline-flex items-center justify-center cursor-pointer border border-transparent"
+                                  title="Remover Usuário"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
