@@ -3285,7 +3285,7 @@ export default function App() {
                           Dados Financeiros & Comerciais
                         </h4>
                         
-                        <div className="grid grid-cols-2 gap-4 text-xs mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs mb-4">
                           {selectedEvent.commercialQuota && (
                             <div className="col-span-2 p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/10">
                               <span className="text-zinc-405 dark:text-zinc-500 text-[8px] font-bold uppercase tracking-wider block">Cota Comercial / Detalhes de Parceria</span>
@@ -3321,7 +3321,7 @@ export default function App() {
                         {(selectedEvent.custo_brindes > 0 || selectedEvent.custo_uniformes > 0 || selectedEvent.custo_passagens > 0 || selectedEvent.custo_hospedagem > 0) && (
                           <div className="space-y-2 pt-3 border-t border-slate-200/50 dark:border-white/5">
                             <span className="text-zinc-405 dark:text-zinc-500 text-[8px] font-bold uppercase tracking-wider block mb-2">Detalhamento de Custos</span>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
                               {selectedEvent.custo_brindes > 0 && (
                                 <div className="flex justify-between items-center text-zinc-500 dark:text-zinc-400">
                                   <span>Brindes/Estoque:</span>
@@ -3538,7 +3538,7 @@ export default function App() {
                                     {travel.status || 'planejada'}
                                   </span>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2 text-[10px] text-zinc-500">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-zinc-500">
                                   <div>
                                     <span className="font-semibold block text-zinc-400">Origem ➔ Destino</span>
                                     <span>{travel.origem || 'N/A'} ➔ {travel.destino || 'N/A'}</span>
@@ -4210,7 +4210,7 @@ export default function App() {
                   <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-650 dark:text-zinc-300">Participantes e Equipe</h4>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Staff (Qtd)</label>
                     <input
@@ -4582,7 +4582,7 @@ export default function App() {
                       <span className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">$</span>
                       <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-650 dark:text-zinc-300">Gestão Financeira V2</h4>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Orçamento Total (R$)</label>
                         <input type="number" value={newOrcamentoTotal} onChange={(e) => setNewOrcamentoTotal(e.target.value)} className={`w-full p-3.5 rounded-xl border text-sm font-medium outline-none transition-all ${darkMode ? 'bg-zinc-955 border-white/5 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 focus:border-indigo-500'}`} placeholder="Ex: 5000" />
@@ -4711,7 +4711,7 @@ export default function App() {
                       {/* Inserção Manual Form Row */}
                       <div className="p-4 rounded-xl border border-slate-200/50 dark:border-white/5 bg-slate-50/40 dark:bg-zinc-950/20 space-y-3">
                         <span className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Inserir Lançamento Manual</span>
-                        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
                           <div>
                             <input 
                               type="text" 
@@ -4803,7 +4803,7 @@ export default function App() {
                     {/* Previsão Financeira */}
                     <div className="p-4 rounded-xl border bg-slate-50/50 dark:bg-zinc-900/30 border-slate-200 dark:border-white/5 mt-4">
                       <h5 className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-4">Previsão Comercial</h5>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Previsão Pipe</label>
                           <input type="number" value={newPrevisaoPipe} onChange={(e) => setNewPrevisaoPipe(e.target.value)} className={`w-full p-3.5 rounded-xl border text-sm font-medium outline-none ${darkMode ? 'bg-zinc-950 border-white/5 text-white' : 'bg-white border-slate-200'}`} placeholder="0" />
@@ -4825,7 +4825,7 @@ export default function App() {
                         <span className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 border border-slate-200 dark:border-white/10 dark:text-zinc-300 flex items-center justify-center text-xs font-bold"><DollarSign className="h-4 w-4" /></span>
                         <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-650 dark:text-zinc-300">Detalhamento de Custos (Legado)</h4>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div>
                           <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Brindes (R$)</label>
                           <input type="number" value={newCustoBrindes} onChange={(e) => setNewCustoBrindes(e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-medium outline-none ${darkMode ? 'bg-zinc-955 border-white/5 text-white' : 'bg-white border-slate-200'}`} placeholder="0" />
@@ -5118,7 +5118,7 @@ export default function App() {
                     </p>
 
                     {/* Metadata line items block */}
-                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-200 dark:border-white/5 text-[10px] font-medium text-zinc-550 dark:text-zinc-400">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-200 dark:border-white/5 text-[10px] font-medium text-zinc-550 dark:text-zinc-400">
                       <div className="flex items-center space-x-2">
                         <Calendar className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                         <span className="truncate">{googleSearchResult.date} {googleSearchResult.time ? `às ${googleSearchResult.time}` : ''}</span>
