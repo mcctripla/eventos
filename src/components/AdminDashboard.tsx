@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
 import { 
@@ -23,8 +23,10 @@ import {
   TrendingUp,
   MapPin,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  Download
 } from 'lucide-react';
+import { downloadAdminWorkbook } from '../exportAdmin';
 import { InventarioTab, FornecedoresTab, ParticipantesTab, ViagensTab, EventosTab, FinanceiroTab, TutorialTab } from './TabViews';
 
 export function AdminDashboard({ 
@@ -70,6 +72,9 @@ export function AdminDashboard({
 
   // Toast stub (admin dashboard is self-contained)
   const [toastMsg, setToastMsg] = useState('');
+  // Controle de quais coleções já carregaram / falharam (usado pela exportação, para não gerar planilha vazia sem avisar)
+  const loadedRef = useRef<Set<string>>(new Set());
+  const failedRef = useRef<Set<string>>(new Set());
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3000);
@@ -85,9 +90,10 @@ export function AdminDashboard({
 
   useEffect(() => {
     // Merge from sub-collections with permission safety
-    const logErr = (colName: string) => (err: any) => console.warn(`Admin sync bypassed for ${colName}:`, err);
+    const logErr = (colName: string) => (err: any) => { failedRef.current.add(colName); console.warn(`Admin sync bypassed for ${colName}:`, err); };
 
     const unsubInv = onSnapshot(collection(db, 'inventario'), (snap) => {
+      loadedRef.current.add('inventario');
       const items = snap.docs.map(d => ({ id: d.id, ...d.data(), _collection: 'inventario' }));
       setInventoryItems(prev => {
         const others = prev.filter(i => i._collection !== 'inventario');
@@ -96,6 +102,7 @@ export function AdminDashboard({
     }, logErr('inventario'));
 
     const unsubBri = onSnapshot(collection(db, 'brindes'), (snap) => {
+      loadedRef.current.add('brindes');
       const items = snap.docs.map(d => ({ id: d.id, ...d.data(), _collection: 'brindes' }));
       setInventoryItems(prev => {
         const others = prev.filter(i => i._collection !== 'brindes');
@@ -104,6 +111,7 @@ export function AdminDashboard({
     }, logErr('brindes'));
 
     const unsubUni = onSnapshot(collection(db, 'uniformes'), (snap) => {
+      loadedRef.current.add('uniformes');
       const items = snap.docs.map(d => ({ id: d.id, ...d.data(), _collection: 'uniformes' }));
       setInventoryItems(prev => {
         const others = prev.filter(i => i._collection !== 'uniformes');
@@ -112,6 +120,7 @@ export function AdminDashboard({
     }, logErr('uniformes'));
 
     const unsubEst = onSnapshot(collection(db, 'estoque'), (snap) => {
+      loadedRef.current.add('estoque');
       const items = snap.docs.map(d => ({ id: d.id, ...d.data(), _collection: 'estoque' }));
       setInventoryItems(prev => {
         const others = prev.filter(i => i._collection !== 'estoque');
@@ -120,26 +129,32 @@ export function AdminDashboard({
     }, logErr('estoque'));
 
     const unsubForn = onSnapshot(collection(db, 'fornecedores'), (snap) => {
+      loadedRef.current.add('fornecedores');
       setFornecedores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('fornecedores'));
 
     const unsubPart = onSnapshot(collection(db, 'participantes'), (snap) => {
+      loadedRef.current.add('participantes');
       setParticipantes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('participantes'));
 
     const unsubViagens = onSnapshot(collection(db, 'viagens'), (snap) => {
+      loadedRef.current.add('viagens');
       setViagens(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('viagens'));
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      loadedRef.current.add('users');
       setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('users'));
 
     const unsubBaixas = onSnapshot(collection(db, 'baixas_vendedores'), (snap) => {
+      loadedRef.current.add('baixas_vendedores');
       setBaixasVendedores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('baixas_vendedores'));
 
     const unsubSolicitacoes = onSnapshot(collection(db, 'solicitacoes_brindes'), (snap) => {
+      loadedRef.current.add('solicitacoes_brindes');
       setSolicitacoesList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, logErr('solicitacoes_brindes'));
 
@@ -220,6 +235,37 @@ export function AdminDashboard({
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
   }, [realEvents]);
+
+  // Exporta todo o painel para .xlsx (somente leitura; usa os dados já carregados na tela)
+  const ADMIN_EXPORT_COLLECTIONS = ['inventario', 'brindes', 'uniformes', 'estoque', 'fornecedores', 'participantes', 'viagens', 'baixas_vendedores', 'solicitacoes_brindes'];
+  const handleExportAll = () => {
+    const pending = ADMIN_EXPORT_COLLECTIONS.filter(c => !loadedRef.current.has(c) && !failedRef.current.has(c));
+    if (pending.length > 0) {
+      showToast('Os dados do painel ainda estão carregando. Tente de novo em alguns segundos.');
+      return;
+    }
+    const failed = ADMIN_EXPORT_COLLECTIONS.filter(c => failedRef.current.has(c));
+    const warnings: string[] = [];
+    if (failed.length > 0) {
+      warnings.push(`Não foi possível ler: ${failed.join(', ')} (permissão ou rede). As abas correspondentes podem estar vazias ou incompletas.`);
+    }
+    if ((events || []).length === 0) warnings.push('Nenhum evento estava carregado no momento da exportação.');
+    try {
+      const { fileName } = downloadAdminWorkbook({
+        events,
+        inventoryItems,
+        fornecedores,
+        participantes,
+        viagens,
+        baixasVendedores,
+        solicitacoes: solicitacoesList
+      }, { warnings });
+      showToast(warnings.length > 0 ? `Exportado com avisos (veja a aba Resumo): ${fileName}` : `Exportado: ${fileName}`);
+    } catch (err) {
+      console.error('Erro ao exportar o painel admin:', err);
+      showToast('Erro ao exportar o painel.');
+    }
+  };
 
   const adminTabs = [
     { id: 'Overview', label: 'Dashboard', icon: BarChart3 },
@@ -368,6 +414,16 @@ export function AdminDashboard({
                 <ChevronDown className="h-4 w-4" />
               </div>
             </div>
+            <button
+              onClick={handleExportAll}
+              aria-label="Exportar tudo"
+              title="Exportar tudo"
+              className={`p-2.5 rounded-xl border shrink-0 transition-all ${
+                darkMode ? 'border-white/10 text-zinc-200 hover:bg-zinc-900' : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Download className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Desktop Tabs View */}
@@ -396,6 +452,19 @@ export function AdminDashboard({
                 </button>
               )
             })}
+
+            <button
+              onClick={handleExportAll}
+              title="Baixar uma planilha com todas as abas do painel"
+              className={`ml-auto flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                darkMode
+                  ? 'border-white/10 text-zinc-200 hover:bg-zinc-900'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Download className="h-4 w-4" />
+              <span>Exportar tudo</span>
+            </button>
           </div>
         </div>
       </div>
